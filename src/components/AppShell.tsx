@@ -58,7 +58,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
     shortLabel: 'วันนี้',
     mobileBottom: true,
     icon: (
-      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <rect x="3" y="4" width="18" height="18" rx="2" />
         <path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01" />
       </svg>
@@ -70,21 +70,9 @@ const ALL_NAV_ITEMS: NavItem[] = [
     shortLabel: 'ตารางเรียน',
     mobileBottom: true,
     icon: (
-      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
         <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-      </svg>
-    ),
-  },
-  {
-    path: '/tasks',
-    label: 'งาน/การบ้าน/สอบ',
-    shortLabel: 'งาน/สอบ',
-    mobileBottom: true,
-    icon: (
-      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M9 11l3 3L22 4" />
-        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
       </svg>
     ),
   },
@@ -94,7 +82,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
     shortLabel: 'ปฏิทิน',
     mobileBottom: true,
     icon: (
-      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <rect x="3" y="4" width="18" height="18" rx="2" />
         <line x1="16" y1="2" x2="16" y2="6" />
         <line x1="8" y1="2" x2="8" y2="6" />
@@ -103,12 +91,24 @@ const ALL_NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    path: '/tasks',
+    label: 'งาน/สอบ',
+    shortLabel: 'งาน/สอบ',
+    mobileBottom: true,
+    icon: (
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M9 11l3 3L22 4" />
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+      </svg>
+    ),
+  },
+  {
     path: '/chat',
     label: 'แชทกลุ่ม',
-    shortLabel: 'แชทกลุ่ม',
+    shortLabel: 'แชท',
     mobileBottom: false,
     icon: (
-      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
     ),
@@ -116,10 +116,10 @@ const ALL_NAV_ITEMS: NavItem[] = [
   {
     path: '/life',
     label: 'ตารางชีวิต',
-    shortLabel: 'ตารางชีวิต',
+    shortLabel: 'ชีวิต',
     mobileBottom: false,
     icon: (
-      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <circle cx="12" cy="12" r="10" />
         <path d="M12 6v6l4 2" />
       </svg>
@@ -131,7 +131,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
     shortLabel: 'กลุ่ม',
     mobileBottom: false,
     icon: (
-      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
         <circle cx="9" cy="7" r="4" />
         <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
@@ -165,36 +165,36 @@ export function AppShell({
     <div className="min-h-screen w-full overflow-x-hidden bg-app text-ink flex flex-col">
       {/* ส่วนหัวเว็บ (Header) */}
       <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-2.5 sm:px-5">
-          {/* โลโก้ + มาสคอตพิกเซลแมว (ธีมมืดและดำแสดงแมวหลับ) */}
-          <div className="flex min-w-0 items-center gap-2.5">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-2 sm:px-5">
+          {/* โลโก้ + มาสคอตพิกเซลอีกา */}
+          <div className="flex shrink-0 items-center gap-2">
             <Link
               to="/today"
-              className="flex min-h-[44px] items-center gap-2.5 rounded-xl px-1.5 py-1 transition hover:bg-surface-hover"
+              className="flex min-h-[44px] items-center gap-2 rounded-xl px-1 py-1 transition hover:bg-surface-hover"
             >
               {headerLogoMascot ?? (
                 <PixelCat
                   mood={isDarkOrOled ? 'sleep' : 'happy'}
-                  size={36}
+                  size={34}
                 />
               )}
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className="font-pixel text-xs tracking-wider text-primary sm:text-sm">
-                    NEKO•PLAN
+                    RAVEN•PLAN
                   </span>
-                  <span className="hidden rounded-md bg-accent-pink-soft px-1.5 py-0.5 font-pixel text-[10px] text-accent-pink-fg xl:inline-block">
+                  <span className="hidden rounded-md bg-accent-pink-soft px-1.5 py-0.5 font-pixel text-[9px] text-accent-pink-fg 2xl:inline-block">
                     2569
                   </span>
                 </div>
-                <p className="truncate text-xs font-bold text-ink sm:text-sm">
+                <p className="whitespace-nowrap text-xs font-bold text-ink sm:text-sm">
                   ตารางชีวิตและการเรียน
                 </p>
               </div>
             </Link>
 
             {activeGroup && (
-              <span className="hidden rounded-lg border border-line bg-surface-alt px-2.5 py-1 text-xs font-medium text-ink-secondary xl:inline-block">
+              <span className="hidden whitespace-nowrap rounded-lg border border-line bg-surface-alt px-2.5 py-1 text-xs font-medium text-ink-secondary 2xl:inline-block max-w-[150px] truncate">
                 กลุ่ม: {activeGroup.name}
               </span>
             )}
@@ -203,14 +203,14 @@ export function AppShell({
           {/* แถบเมนูบนสำหรับคอมพิวเตอร์ (>1024px) */}
           <nav
             aria-label="เมนูหลักคอมพิวเตอร์"
-            className="hidden lg:flex lg:items-center lg:gap-1"
+            className="hidden lg:flex items-center gap-1 overflow-x-auto py-1"
           >
             {ALL_NAV_ITEMS.map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}
                 className={({ isActive }) =>
-                  `flex min-h-[40px] items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all ${
+                  `flex min-h-[38px] shrink-0 whitespace-nowrap items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold transition-all ${
                     isActive
                       ? 'bg-primary text-ink-inverted shadow-2xs'
                       : 'text-ink-secondary hover:bg-surface-hover hover:text-ink'
@@ -218,13 +218,13 @@ export function AppShell({
                 }
               >
                 {item.icon}
-                <span>{item.label}</span>
+                <span className="whitespace-nowrap">{item.label}</span>
               </NavLink>
             ))}
           </nav>
 
           {/* ปุ่มสลับธีม + ป้ายบอกสิทธิ์ + ปุ่มล็อกอิน/ออกจากระบบ */}
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             {/* ทางลัดตารางชีวิตและกลุ่มบนมือถือ */}
             <NavLink
               to="/life"
@@ -260,43 +260,43 @@ export function AppShell({
               onClick={cycleTheme}
               title={`ธีมปัจจุบัน: ${THEME_META[theme].label} (คลิกเพื่อเปลี่ยนธีม)`}
               aria-label={`สลับธีม ปัจจุบันคือ ${THEME_META[theme].label}`}
-              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-xl border border-line-strong bg-surface-alt px-2.5 py-1.5 text-xs font-semibold text-ink transition hover:bg-surface-hover"
+              className="inline-flex min-h-[38px] min-w-[38px] items-center justify-center gap-1.5 rounded-xl border border-line-strong bg-surface-alt px-2.5 py-1.5 text-xs font-semibold text-ink transition hover:bg-surface-hover"
             >
               {getThemeIcon(theme)}
-              <span className="hidden md:inline">{THEME_META[theme].shortLabel}</span>
+              <span className="hidden xl:inline">{THEME_META[theme].shortLabel}</span>
             </button>
 
             {/* ป้ายบอกสิทธิ์ / โหมดดูอย่างเดียว */}
             <Badge
               tone={getRoleTone(currentRole)}
-              className="hidden sm:inline-flex"
+              className="hidden whitespace-nowrap xl:inline-flex"
               title="ระดับสิทธิ์ปัจจุบันของคุณ"
             >
               {isViewer
-                ? 'โหมดดูอย่างเดียว (ผู้ชม)'
+                ? 'โหมดดูอย่างเดียว'
                 : `สิทธิ์: ${getRoleLabelThai(currentRole)}`}
             </Badge>
 
             {user ? (
-              <div className="flex items-center gap-1.5">
+              <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
                 <Link
                   to="/login"
-                  className="hidden max-w-[110px] truncate text-xs font-semibold text-ink-secondary hover:text-primary md:inline-block"
+                  className="hidden max-w-[100px] truncate whitespace-nowrap text-xs font-semibold text-ink-secondary hover:text-primary 2xl:inline-block"
                 >
                   {displayName}
                 </Link>
                 <button
                   type="button"
                   onClick={() => void signOut()}
-                  className="min-h-[44px] sm:min-h-[38px] rounded-xl border border-status-danger bg-status-danger-soft px-2.5 py-1.5 text-xs font-semibold text-status-danger-fg transition hover:opacity-90"
+                  className="min-h-[38px] whitespace-nowrap rounded-xl border border-status-danger bg-status-danger-soft px-3 py-1.5 text-xs font-semibold text-status-danger-fg transition hover:opacity-90"
                 >
-                  ออก
+                  ออกจากระบบ
                 </button>
               </div>
             ) : (
               <Link
                 to="/login"
-                className="inline-flex min-h-[44px] sm:min-h-[38px] items-center rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-ink-inverted transition hover:bg-primary-hover"
+                className="inline-flex min-h-[38px] whitespace-nowrap items-center rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-ink-inverted transition hover:bg-primary-hover"
               >
                 เข้าสู่ระบบ
               </Link>
