@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS public.share_links (
 -- ============================================================================
 
 -- ฟังก์ชันสร้างโปรไฟล์อัตโนมัติเมื่อผู้ใช้ล็อกอิน/สมัครสมาชิกใหม่ (ไม่นำอีเมลเต็มไปแสดงสาธารณะ)
+-- และให้สิทธิ์ admin อัตโนมัติสำหรับอีเมลผู้ดูแลหลัก hoghopper5@gmail.com
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -155,6 +156,15 @@ BEGIN
   INSERT INTO public.profiles (id, display_name)
   VALUES (NEW.id, v_prefix)
   ON CONFLICT (id) DO NOTHING;
+
+  -- หากเป็นอีเมลผู้ดูแลหลัก hoghopper5@gmail.com ให้เพิ่มเป็น admin ในกลุ่มที่มีอยู่ทันที
+  IF lower(COALESCE(NEW.email, '')) = 'hoghopper5@gmail.com' THEN
+    INSERT INTO public.group_members (group_id, user_id, role)
+    SELECT g.id, NEW.id, 'admin'
+    FROM public.groups g
+    ON CONFLICT (group_id, user_id) DO NOTHING;
+  END IF;
+
   RETURN NEW;
 END;
 $$;
@@ -164,17 +174,31 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- ฟังก์ชันเพิ่มผู้สร้างกลุ่มเป็น owner อัตโนมัติเมื่อสร้างกลุ่มใหม่
+-- ฟังก์ชันเพิ่มผู้สร้างกลุ่มเป็น owner อัตโนมัติเมื่อสร้างกลุ่มใหม่ (และเพิ่ม hoghopper5@gmail.com เป็น admin หากมีบัญชีอยู่แล้ว)
 CREATE OR REPLACE FUNCTION public.handle_new_group()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  v_admin_id uuid;
 BEGIN
   INSERT INTO public.group_members (group_id, user_id, role)
   VALUES (NEW.id, NEW.created_by, 'owner')
   ON CONFLICT (group_id, user_id) DO UPDATE SET role = 'owner';
+
+  SELECT id INTO v_admin_id
+  FROM auth.users
+  WHERE lower(email) = 'hoghopper5@gmail.com'
+  LIMIT 1;
+
+  IF v_admin_id IS NOT NULL AND v_admin_id <> NEW.created_by THEN
+    INSERT INTO public.group_members (group_id, user_id, role)
+    VALUES (NEW.id, v_admin_id, 'admin')
+    ON CONFLICT (group_id, user_id) DO NOTHING;
+  END IF;
+
   RETURN NEW;
 END;
 $$;
@@ -434,11 +458,13 @@ CREATE POLICY "courses_update_group_members"
   USING (public.get_my_group_role(group_id) IN ('owner', 'admin', 'member'))
   WITH CHECK (public.get_my_group_role(group_id) IN ('owner', 'admin', 'member'));
 
+-- นโยบาย: ลบรายวิชา (ล้างตาราง) ได้เฉพาะ owner และ admin เท่านั้น
 DROP POLICY IF EXISTS "courses_delete_group_members" ON public.courses;
-CREATE POLICY "courses_delete_group_members"
+DROP POLICY IF EXISTS "courses_delete_owner_admin" ON public.courses;
+CREATE POLICY "courses_delete_owner_admin"
   ON public.courses FOR DELETE
   TO authenticated
-  USING (public.get_my_group_role(group_id) IN ('owner', 'admin', 'member'));
+  USING (public.get_my_group_role(group_id) IN ('owner', 'admin'));
 
 -- ----------------------------------------------------------------------------
 -- 4.6 ตาราง class_sessions (คาบเรียนในตารางเรียนของกลุ่ม)
@@ -450,7 +476,7 @@ CREATE POLICY "class_sessions_select_authenticated"
   TO authenticated
   USING (true);
 
--- นโยบาย: เพิ่ม/แก้ไข/ลบคาบเรียนได้เฉพาะสมาชิกกลุ่มที่มี role เป็น owner, admin หรือ member เท่านั้น
+-- นโยบาย: เพิ่ม/แก้ไขคาบเรียนได้เฉพาะสมาชิกกลุ่มที่มี role เป็น owner, admin หรือ member เท่านั้น
 DROP POLICY IF EXISTS "class_sessions_insert_group_members" ON public.class_sessions;
 CREATE POLICY "class_sessions_insert_group_members"
   ON public.class_sessions FOR INSERT
@@ -464,11 +490,13 @@ CREATE POLICY "class_sessions_update_group_members"
   USING (public.get_my_group_role(group_id) IN ('owner', 'admin', 'member'))
   WITH CHECK (public.get_my_group_role(group_id) IN ('owner', 'admin', 'member'));
 
+-- นโยบาย: ลบคาบเรียน (ล้างตาราง) ได้เฉพาะ owner และ admin เท่านั้น
 DROP POLICY IF EXISTS "class_sessions_delete_group_members" ON public.class_sessions;
-CREATE POLICY "class_sessions_delete_group_members"
+DROP POLICY IF EXISTS "class_sessions_delete_owner_admin" ON public.class_sessions;
+CREATE POLICY "class_sessions_delete_owner_admin"
   ON public.class_sessions FOR DELETE
   TO authenticated
-  USING (public.get_my_group_role(group_id) IN ('owner', 'admin', 'member'));
+  USING (public.get_my_group_role(group_id) IN ('owner', 'admin'));
 
 -- ----------------------------------------------------------------------------
 -- 4.7 ตาราง tasks (งาน/การบ้าน/สอบ)

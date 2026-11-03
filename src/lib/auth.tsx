@@ -141,7 +141,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .select('id, name, description, created_by, created_at')
         .order('created_at', { ascending: true })
 
-      const groupList = (groupsData ?? []) as GroupInfo[]
+      let groupList = (groupsData ?? []) as GroupInfo[]
+
+      // หากผู้ดูแลหลัก hoghopper5@gmail.com ล็อกอินแล้วยังไม่มีกลุ่มในระบบ ให้สร้างกลุ่มเริ่มต้นให้อัตโนมัติ
+      if (
+        groupList.length === 0 &&
+        user.email?.toLowerCase() === 'hoghopper5@gmail.com'
+      ) {
+        const { data: createdGroup } = await supabase
+          .from('groups')
+          .insert({
+            name: 'กลุ่มตารางเรียนหลัก',
+            description: 'กลุ่มหลักสำหรับจัดการตารางเรียนและงาน',
+            created_by: user.id,
+          })
+          .select('id, name, description, created_by, created_at')
+          .single()
+
+        if (createdGroup) {
+          groupList = [createdGroup as GroupInfo]
+        }
+      }
+
       setGroups(groupList)
 
       if (groupList.length === 0) {
