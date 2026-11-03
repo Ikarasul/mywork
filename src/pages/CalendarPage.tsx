@@ -376,42 +376,47 @@ export function CalendarPage() {
         return {
           icon: '📚',
           badgeText: 'คาบเรียน',
-          bg: 'bg-primary-soft/50 hover:bg-primary-soft',
-          border: 'border-l-4 border-l-primary border-line',
+          bg: 'bg-primary-soft/40 hover:bg-primary-soft/70',
+          border: 'border-l-[3.5px] border-l-primary border-line',
           badgeTone: 'primary' as const,
+          chipClass: 'bg-primary/20 text-primary border border-primary/30',
         }
       case 'routine':
         return {
           icon: '⏰',
           badgeText: 'กิจวัตร',
-          bg: 'bg-accent-mint-soft/50 hover:bg-accent-mint-soft',
-          border: 'border-l-4 border-l-accent-mint border-line',
+          bg: 'bg-accent-mint-soft/40 hover:bg-accent-mint-soft/70',
+          border: 'border-l-[3.5px] border-l-accent-mint border-line',
           badgeTone: 'mint' as const,
+          chipClass: 'bg-accent-mint/20 text-accent-mint-fg border border-accent-mint/30',
         }
       case 'exam':
         return {
           icon: '🎯',
           badgeText: 'วันสอบ',
-          bg: 'bg-accent-pink-soft/60 hover:bg-accent-pink-soft',
-          border: 'border-l-4 border-l-accent-pink border-line',
+          bg: 'bg-accent-pink-soft/50 hover:bg-accent-pink-soft/80',
+          border: 'border-l-[3.5px] border-l-accent-pink border-line',
           badgeTone: 'pink' as const,
+          chipClass: 'bg-accent-pink/20 text-accent-pink-fg border border-accent-pink/30',
         }
       case 'task':
         return {
           icon: '📝',
           badgeText: 'งาน/การบ้าน',
-          bg: 'bg-accent-amber-soft/50 hover:bg-accent-amber-soft',
-          border: 'border-l-4 border-l-accent-amber border-line',
+          bg: 'bg-accent-amber-soft/40 hover:bg-accent-amber-soft/70',
+          border: 'border-l-[3.5px] border-l-accent-amber border-line',
           badgeTone: 'amber' as const,
+          chipClass: 'bg-accent-amber/20 text-accent-amber-fg border border-accent-amber/30',
         }
       case 'gcal':
       default:
         return {
           icon: '📆',
           badgeText: 'Google',
-          bg: 'bg-accent-sky-soft/60 hover:bg-accent-sky-soft',
-          border: 'border-l-4 border-l-accent-sky border-dashed border-line',
+          bg: 'bg-accent-sky-soft/40 hover:bg-accent-sky-soft/70',
+          border: 'border-l-[3.5px] border-l-accent-sky border-line',
           badgeTone: 'sky' as const,
+          chipClass: 'bg-accent-sky/20 text-accent-sky-fg border border-accent-sky/30',
         }
     }
   }
@@ -646,113 +651,153 @@ export function CalendarPage() {
       {loading ? (
         <Skeleton lines={5} label="อีกาตัวน้อยกำลังจัดเรียงปฏิทินให้คุณ..." />
       ) : viewMode === 'week' ? (
-        /* ================= 1. มุมมองรายสัปดาห์ (ดูง่ายที่สุด สะอาดตา) ================= */
-        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-7">
-          {currentWeekDays.map((day) => {
-            const dayMeta = DAYS_META[day.dayOfWeek]
-            const dayEvents = getEventsForDate(day.dateKey, day.dayOfWeek)
-            const isToday = day.isToday
+        /* ================= 1. มุมมองรายสัปดาห์ (ดีไซน์กระดานปฏิทินแบบ Unified เชื่อมต่อ 7 วัน สะอาด สวยงาม ไม่บีบอัด) ================= */
+        <Card padding="none" className="overflow-hidden border-line shadow-xs">
+          <div className="overflow-x-auto">
+            <div className="grid min-w-[920px] grid-cols-7 divide-x divide-line">
+              {currentWeekDays.map((day) => {
+                const dayMeta = DAYS_META[day.dayOfWeek]
+                const dayEvents = getEventsForDate(day.dateKey, day.dayOfWeek)
+                const isToday = day.isToday
 
-            return (
-              <div
-                key={day.dateKey}
-                className={`flex flex-col rounded-2xl border p-3.5 transition ${
-                  isToday
-                    ? 'border-2 border-primary bg-primary-soft/20 shadow-xs'
-                    : 'border-line bg-surface hover:border-line-strong'
-                }`}
-              >
-                {/* หัวแถบวัน */}
-                <div className="flex items-center justify-between border-b border-line pb-2.5">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-xs font-bold text-ink-secondary">
-                      วัน{dayMeta.label}
-                    </span>
-                    <span className="font-mono text-base sm:text-lg font-extrabold text-ink">
-                      {day.dayNum}
-                    </span>
-                  </div>
-                  {isToday ? (
-                    <Badge tone="primary">วันนี้</Badge>
-                  ) : (
-                    <span className="text-[11px] font-semibold text-ink-muted">
-                      {dayEvents.length > 0 ? `${dayEvents.length} รายการ` : 'ว่าง'}
-                    </span>
-                  )}
-                </div>
+                return (
+                  <div
+                    key={day.dateKey}
+                    className={`flex flex-col transition-colors ${
+                      isToday ? 'bg-primary-soft/10' : 'bg-surface'
+                    }`}
+                  >
+                    {/* ส่วนหัวของแต่ละวัน (Day Header) */}
+                    <div
+                      className={`border-b border-line px-2.5 py-3 text-center transition-colors ${
+                        isToday
+                          ? 'bg-primary-soft/40 border-b-primary/40'
+                          : 'bg-surface-alt/70'
+                      }`}
+                    >
+                      <div className="flex items-center justify-center gap-1.5">
+                        <span className="text-xs font-bold text-ink-secondary">
+                          วัน{dayMeta.label}
+                        </span>
+                        {isToday && (
+                          <span className="rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-extrabold text-ink-inverted">
+                            วันนี้
+                          </span>
+                        )}
+                      </div>
 
-                {/* รายการกิจกรรมในวันนั้นแบบการ์ดอ่านง่าย */}
-                <div className="mt-3 flex-1 space-y-2">
-                  {dayEvents.length === 0 ? (
-                    <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-line bg-surface-alt/40 text-center text-xs text-ink-muted">
-                      <span>ไม่มีกิจกรรม</span>
-                    </div>
-                  ) : (
-                    dayEvents.map((ev) => {
-                      const theme = getItemTheme(ev.type)
-                      return (
-                        <div
-                          key={ev.id}
-                          onClick={() => {
-                            if (ev.rawGcal) {
-                              setSelectedGcalEvent(ev.rawGcal)
-                            } else {
-                              setSelectedUnifiedEvent(ev)
-                            }
-                          }}
-                          className={`cursor-pointer rounded-xl border p-3 text-xs transition hover:scale-[1.01] hover:shadow-xs ${theme.bg} ${theme.border}`}
+                      <div className="mt-1 flex items-center justify-center">
+                        <span
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-full font-mono text-sm font-extrabold transition ${
+                            isToday
+                              ? 'bg-primary text-ink-inverted shadow-xs'
+                              : 'text-ink'
+                          }`}
                         >
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="font-mono text-xs font-extrabold text-ink">
-                              {ev.timeLabel}
-                            </span>
-                            <Badge tone={theme.badgeTone}>
-                              {theme.icon} {theme.badgeText}
-                            </Badge>
-                          </div>
-                          <p className="mt-1.5 text-xs sm:text-[13px] font-bold text-ink line-clamp-2 leading-snug">
-                            {ev.title}
-                          </p>
-                          {ev.location && (
-                            <p className="mt-1 text-[11px] text-ink-muted">
-                              📍 {ev.location}
-                            </p>
-                          )}
-                          {(ev.rawClass?.online_url || ev.rawClass?.contact_url) && (
-                            <div className="mt-2 flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-line/30">
-                              {ev.rawClass.online_url && (
-                                <a
-                                  href={ev.rawClass.online_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-accent-pink shadow-2xs hover:underline"
+                          {day.dayNum}
+                        </span>
+                      </div>
+
+                      <div className="mt-1 text-[10px] font-semibold text-ink-muted">
+                        {dayEvents.length > 0 ? `${dayEvents.length} รายการ` : 'ว่าง'}
+                      </div>
+                    </div>
+
+                    {/* รายการกิจกรรมในวันนั้น (Event Cards List) */}
+                    <div className="flex-1 space-y-2 p-2 min-h-[340px]">
+                      {dayEvents.length === 0 ? (
+                        <div className="flex h-32 flex-col items-center justify-center text-center text-xs text-ink-muted/40 select-none">
+                          <span className="text-base opacity-40">☕</span>
+                          <span className="mt-1 text-[11px]">ไม่มีกิจกรรม</span>
+                        </div>
+                      ) : (
+                        dayEvents.map((ev) => {
+                          const theme = getItemTheme(ev.type)
+                          return (
+                            <div
+                              key={ev.id}
+                              onClick={() => {
+                                if (ev.rawGcal) {
+                                  setSelectedGcalEvent(ev.rawGcal)
+                                } else {
+                                  setSelectedUnifiedEvent(ev)
+                                }
+                              }}
+                              className={`group cursor-pointer rounded-xl border p-2.5 text-xs transition-all hover:shadow-xs hover:border-line-strong ${theme.bg} ${theme.border}`}
+                            >
+                              {/* แถวเวลา + แท็กประเภทที่ไม่ตัดบรรทัด */}
+                              <div className="flex items-center justify-between gap-1.5">
+                                <span className="font-mono text-[11px] font-extrabold text-ink whitespace-nowrap">
+                                  {ev.timeLabel}
+                                </span>
+                                <span
+                                  className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold ${theme.chipClass}`}
                                 >
-                                  🔗 Meet ↗
-                                </a>
+                                  <span>{theme.icon}</span>
+                                  <span className="hidden xl:inline">{theme.badgeText}</span>
+                                </span>
+                              </div>
+
+                              {/* รหัสวิชา (ถ้ามี) + ชื่อวิชา/กิจกรรม */}
+                              <div className="mt-1.5">
+                                {ev.rawClass?.course_code && (
+                                  <div className="font-mono text-[10px] font-extrabold uppercase text-accent-pink tracking-wide">
+                                    {ev.rawClass.course_code}
+                                  </div>
+                                )}
+                                <p className="text-xs font-bold text-ink leading-snug line-clamp-3 break-words group-hover:text-primary">
+                                  {ev.title}
+                                </p>
+                              </div>
+
+                              {/* สถานที่ / ห้องเรียน */}
+                              {ev.location && (
+                                <p className="mt-1 flex items-center gap-1 text-[11px] text-ink-muted">
+                                  <span>📍</span>
+                                  <span className="truncate">{ev.location}</span>
+                                </p>
                               )}
-                              {ev.rawClass.contact_url && (
-                                <a
-                                  href={ev.rawClass.contact_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-status-success shadow-2xs hover:underline"
-                                >
-                                  💬 LINE ↗
-                                </a>
+
+                              {/* ปุ่มลิงก์ Meet / LINE แบบ Micro Buttons ไม่เกะกะ */}
+                              {(ev.rawClass?.online_url || ev.rawClass?.contact_url) && (
+                                <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-line/40 pt-1.5">
+                                  {ev.rawClass.online_url && (
+                                    <a
+                                      href={ev.rawClass.online_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="inline-flex items-center gap-1 rounded-md border border-accent-pink/30 bg-accent-pink-soft/80 px-2 py-0.5 text-[10px] font-bold text-accent-pink shadow-2xs transition hover:bg-accent-pink hover:text-ink-inverted"
+                                    >
+                                      <span>🔗 Meet</span>
+                                      <span>↗</span>
+                                    </a>
+                                  )}
+                                  {ev.rawClass.contact_url && (
+                                    <a
+                                      href={ev.rawClass.contact_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="inline-flex items-center gap-1 rounded-md border border-status-success/30 bg-status-success-soft/80 px-2 py-0.5 text-[10px] font-bold text-status-success shadow-2xs transition hover:bg-status-success hover:text-ink-inverted"
+                                    >
+                                      <span>💬 LINE</span>
+                                      <span>↗</span>
+                                    </a>
+                                  )}
+                                </div>
                               )}
                             </div>
-                          )}
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </Card>
       ) : viewMode === 'month' ? (
         /* ================= 2. มุมมองรายเดือนแบบโปร่งโล่ง ================= */
         <div className="grid gap-6 lg:grid-cols-4">
