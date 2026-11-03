@@ -1,28 +1,33 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import SupabaseConfigBanner from './components/SupabaseConfigBanner'
+import { AuthProvider } from './lib/auth'
 import LifeSchedulePage from './pages/LifeSchedulePage'
 import ClassSchedulePage from './pages/ClassSchedulePage'
 import TasksPage from './pages/TasksPage'
 import GroupChatPage from './pages/GroupChatPage'
+import LoginPage from './pages/LoginPage'
 
 export function App() {
   return (
-    <BrowserRouter>
-      <div className="min-h-screen bg-slate-50 text-slate-900">
-        <Navbar />
-        <SupabaseConfigBanner />
-        <main className="mx-auto max-w-6xl px-4 py-6">
-          <Routes>
-            <Route path="/" element={<Navigate to="/life" replace />} />
-            <Route path="/life" element={<LifeSchedulePage />} />
-            <Route path="/schedule" element={<ClassSchedulePage />} />
-            <Route path="/tasks" element={<TasksPage />} />
-            <Route path="/chat" element={<GroupChatPage />} />
-          </Routes>
-        </main>
-      </div>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <div className="min-h-screen bg-slate-50 text-slate-900">
+          <Navbar />
+          <SupabaseConfigBanner />
+          <main className="mx-auto max-w-6xl px-4 py-6">
+            <Routes>
+              <Route path="/" element={<Navigate to="/life" replace />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/life" element={<LifeSchedulePage />} />
+              <Route path="/schedule" element={<ClassSchedulePage />} />
+              <Route path="/tasks" element={<TasksPage />} />
+              <Route path="/chat" element={<GroupChatPage />} />
+            </Routes>
+          </main>
+        </div>
+      </BrowserRouter>
+    </AuthProvider>
   )
 }
 
