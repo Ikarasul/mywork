@@ -9,6 +9,7 @@ import TasksPage from './pages/TasksPage'
 import GroupChatPage from './pages/GroupChatPage'
 import LoginPage from './pages/LoginPage'
 import GroupPage from './pages/GroupPage'
+import SharedViewPage from './pages/SharedViewPage'
 
 export function App() {
   return (
@@ -23,6 +24,7 @@ export function App() {
               <Route path="/" element={<Navigate to="/life" replace />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/group" element={<GroupPage />} />
+              <Route path="/share/:token" element={<SharedViewPage />} />
               <Route path="/life" element={<LifeSchedulePage />} />
               <Route path="/schedule" element={<ClassSchedulePage />} />
               <Route path="/tasks" element={<TasksPage />} />
