@@ -1,7 +1,10 @@
+import type { ReactNode } from 'react'
+import PixelCat from '../PixelCat'
+
 export interface SkeletonProps {
   lines?: number
   className?: string
-  illustration?: React.ReactNode
+  illustration?: ReactNode
   label?: string
 }
 
@@ -9,7 +12,7 @@ export function Skeleton({
   lines = 3,
   className = '',
   illustration,
-  label = 'กำลังโหลดข้อมูล...',
+  label = 'แมวเหมียวกำลังจัดตารางข้อมูลให้คุณ...',
 }: SkeletonProps) {
   return (
     <div
@@ -17,12 +20,10 @@ export function Skeleton({
       aria-label={label}
       className={`card-surface rounded-2xl p-6 ${className}`}
     >
-      {illustration && (
-        <div className="mb-4 flex flex-col items-center justify-center gap-2">
-          {illustration}
-          <span className="text-xs font-medium text-ink-muted">{label}</span>
-        </div>
-      )}
+      <div className="mb-4 flex flex-col items-center justify-center gap-2">
+        {illustration ?? <PixelCat mood="idle" size={52} />}
+        <span className="text-xs font-medium text-ink-muted">{label}</span>
+      </div>
       <div className="space-y-3 animate-pulse">
         {Array.from({ length: lines }).map((_, idx) => (
           <div

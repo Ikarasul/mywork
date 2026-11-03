@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { getRoleLabelThai, useAuth } from '../lib/auth'
 import { THEME_META, useTheme, type ThemeMode } from '../lib/theme'
+import PixelCat from './PixelCat'
 import Badge, { type BadgeTone } from './ui/Badge'
 
 interface NavItem {
@@ -144,19 +145,25 @@ export function AppShell({
   const { theme, cycleTheme } = useTheme()
 
   const isViewer = currentRole === 'viewer'
+  const isDarkOrOled = theme === 'dark' || theme === 'oled'
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-app text-ink flex flex-col">
       {/* ส่วนหัวเว็บ (Header) */}
       <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-2.5 sm:px-5">
-          {/* โลโก้ + มาสคอตพิกเซลแมว */}
+          {/* โลโก้ + มาสคอตพิกเซลแมว (ธีมมืดและดำแสดงแมวหลับ) */}
           <div className="flex min-w-0 items-center gap-2.5">
             <Link
               to="/today"
               className="flex min-h-[44px] items-center gap-2.5 rounded-xl px-1.5 py-1 transition hover:bg-surface-hover"
             >
-              {headerLogoMascot}
+              {headerLogoMascot ?? (
+                <PixelCat
+                  mood={isDarkOrOled ? 'sleep' : 'happy'}
+                  size={36}
+                />
+              )}
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className="font-pixel text-xs tracking-wider text-primary sm:text-sm">
@@ -316,11 +323,16 @@ export function AppShell({
           <main className="mx-auto w-full max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
             {children}
           </main>
-          {footerSleepMascot && (
+          {footerSleepMascot ? (
             <div className="mx-auto max-w-6xl px-3 pb-6 sm:px-6">
               {footerSleepMascot}
             </div>
-          )}
+          ) : isDarkOrOled ? (
+            <div className="mx-auto flex max-w-6xl items-center justify-center gap-2.5 px-3 pb-6 text-xs text-ink-muted sm:px-6">
+              <PixelCat mood="sleep" size={28} />
+              <span>โหมดกลางคืนเปิดอยู่ — น้องแมวกำลังนอนหลับพักสายตาไปพร้อมกับคุณ</span>
+            </div>
+          ) : null}
         </div>
       </div>
 
