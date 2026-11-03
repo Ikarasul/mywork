@@ -8,6 +8,7 @@ import ClassSchedulePage from './pages/ClassSchedulePage'
 import TasksPage from './pages/TasksPage'
 import GroupChatPage from './pages/GroupChatPage'
 import LoginPage from './pages/LoginPage'
+import GroupPage from './pages/GroupPage'
 
 export function App() {
   return (
@@ -21,6 +22,7 @@ export function App() {
             <Routes>
               <Route path="/" element={<Navigate to="/life" replace />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/group" element={<GroupPage />} />
               <Route path="/life" element={<LifeSchedulePage />} />
               <Route path="/schedule" element={<ClassSchedulePage />} />
               <Route path="/tasks" element={<TasksPage />} />
