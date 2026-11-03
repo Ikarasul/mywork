@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import AppointmentDialog from '../components/AppointmentDialog'
 import GoogleCalendarSyncBar, {
   GoogleCalendarEventModal,
 } from '../components/GoogleCalendarSyncBar'
@@ -11,6 +12,7 @@ import {
   EmptyState,
   Skeleton,
 } from '../components/ui'
+import { formatApptTimeLabel, toDateKey, useAppointments } from '../lib/appointments'
 import { useAuth } from '../lib/auth'
 import {
   formatFullDateThai,
@@ -27,6 +29,7 @@ import {
   timeToMinutes,
 } from '../lib/storage'
 import type {
+  AppointmentItem,
   CourseScheduleItem,
   DayOfWeek,
   GoogleCalendarEventItem,
@@ -49,7 +52,7 @@ const DAYS_META: Record<
 
 const DAYS_ORDER: DayOfWeek[] = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
 
-type CalendarItemType = 'class' | 'routine' | 'task' | 'exam' | 'gcal'
+type CalendarItemType = 'class' | 'routine' | 'task' | 'exam' | 'gcal' | 'appt'
 
 interface UnifiedCalendarEvent {
   id: string
@@ -60,6 +63,7 @@ interface UnifiedCalendarEvent {
   startMin: number
   type: CalendarItemType
   rawGcal?: GoogleCalendarEventItem
+  rawAppt?: AppointmentItem
   rawTask?: TaskItem
   rawClass?: CourseScheduleItem
   rawRoutine?: RoutineItem
@@ -102,6 +106,12 @@ export function CalendarPage() {
   const [filterTasks, setFilterTasks] = useState(true)
   const [filterExams, setFilterExams] = useState(true)
   const [filterGcal, setFilterGcal] = useState(true)
+  const [filterAppts, setFilterAppts] = useState(true)
+  const appts = useAppointments()
+  const [apptDialog, setApptDialog] = useState<{ open: boolean; item: AppointmentItem | null }>({
+    open: false,
+    item: null,
+  })
 
   const [sessions, setSessions] = useState<CourseScheduleItem[]>([])
   const [routines, setRoutines] = useState<RoutineItem[]>([])
@@ -323,9 +333,42 @@ export function CalendarPage() {
         }
       }
 
+      // 5. นัดหมายของกลุ่ม (ตรงวันที่)
+      if (filterAppts) {
+        for (const a of appts.byDate.get(dateKey) ?? []) {
+          events.push({
+            id: `appt-${a.id}`,
+            title: a.title,
+            subtitle: a.course_code ? `วิชา ${a.course_code}` : 'นัดหมาย',
+            location: a.location || undefined,
+            timeLabel: formatApptTimeLabel(a),
+            startMin: a.all_day ? 0 : timeToMinutes(a.start_time),
+            type: 'appt',
+            rawAppt: a,
+            dateKey,
+            dayOfWeek,
+          })
+        }
+      }
+
       return events.sort((a, b) => a.startMin - b.startMin)
     },
-    [filterClasses, filterRoutines, filterTasks, filterExams, filterGcal, sessions, routines, tasks, gcal.events, gcal.overlayVisible],
+    [filterClasses, filterRoutines, filterTasks, filterExams, filterGcal, filterAppts, appts.byDate, sessions, routines, tasks, gcal.events, gcal.overlayVisible],
+  )
+
+  function handleEventClick(ev: UnifiedCalendarEvent) {
+    if (ev.rawGcal) {
+      setSelectedGcalEvent(ev.rawGcal)
+    } else if (ev.rawAppt) {
+      setApptDialog({ open: true, item: ev.rawAppt })
+    } else {
+      setSelectedUnifiedEvent(ev)
+    }
+  }
+
+  const courseCodeOptions = useMemo(
+    () => Array.from(new Set(sessions.map((s) => s.course_code.toUpperCase()))).sort(),
+    [sessions],
   )
 
   const selectedDayEvents = useMemo(() => {
@@ -407,6 +450,15 @@ export function CalendarPage() {
           border: 'border-l-[3.5px] border-l-accent-amber border-line',
           badgeTone: 'amber' as const,
           chipClass: 'bg-accent-amber/20 text-accent-amber-fg border border-accent-amber/30',
+        }
+      case 'appt':
+        return {
+          icon: '🤝',
+          badgeText: 'นัดหมาย',
+          bg: 'bg-accent-amber-soft/60 hover:bg-accent-amber-soft',
+          border: 'border-l-[3.5px] border-l-accent-amber border-line',
+          badgeTone: 'amber' as const,
+          chipClass: 'bg-accent-amber/25 text-accent-amber-fg border border-accent-amber/40',
         }
       case 'gcal':
       default:
@@ -548,6 +600,27 @@ export function CalendarPage() {
           >
             <span>📆</span>
             <span>Google Calendar</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFilterAppts(!filterAppts)}
+            className={`flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition sm:min-h-[36px] ${
+              filterAppts
+                ? 'border-accent-amber bg-accent-amber-soft text-accent-amber-fg shadow-2xs'
+                : 'border-line bg-surface-alt text-ink-muted opacity-60'
+            }`}
+          >
+            <span>🤝</span>
+            <span>นัดหมาย</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setApptDialog({ open: true, item: null })}
+            className="ml-auto flex min-h-[44px] items-center gap-1.5 rounded-xl bg-primary px-3.5 py-1.5 text-xs font-bold text-ink-inverted shadow-2xs transition hover:bg-primary-hover sm:min-h-[36px]"
+          >
+            <span>+ เพิ่มนัด</span>
           </button>
         </div>
       </Card>
@@ -717,11 +790,7 @@ export function CalendarPage() {
                             <div
                               key={ev.id}
                               onClick={() => {
-                                if (ev.rawGcal) {
-                                  setSelectedGcalEvent(ev.rawGcal)
-                                } else {
-                                  setSelectedUnifiedEvent(ev)
-                                }
+                                handleEventClick(ev)
                               }}
                               className={`group cursor-pointer rounded-xl border p-2.5 text-xs transition-all hover:shadow-xs hover:border-line-strong ${theme.bg} ${theme.border}`}
                             >
@@ -897,11 +966,7 @@ export function CalendarPage() {
                     <div
                       key={ev.id}
                       onClick={() => {
-                        if (ev.rawGcal) {
-                          setSelectedGcalEvent(ev.rawGcal)
-                        } else {
-                          setSelectedUnifiedEvent(ev)
-                        }
+                        handleEventClick(ev)
                       }}
                       className={`cursor-pointer rounded-xl border p-3 transition hover:shadow-2xs ${theme.bg} ${theme.border}`}
                     >
@@ -959,11 +1024,7 @@ export function CalendarPage() {
                           <div
                             key={ev.id}
                             onClick={() => {
-                              if (ev.rawGcal) {
-                                setSelectedGcalEvent(ev.rawGcal)
-                              } else {
-                                setSelectedUnifiedEvent(ev)
-                              }
+                              handleEventClick(ev)
                             }}
                             className={`cursor-pointer rounded-xl border p-3 transition hover:shadow-2xs ${theme.bg} ${theme.border}`}
                           >
@@ -992,6 +1053,19 @@ export function CalendarPage() {
           </div>
         </Card>
       )}
+
+      {/* ป็อปอัพเพิ่ม/แก้ไข/ลบนัดหมายของกลุ่ม */}
+      <AppointmentDialog
+        open={apptDialog.open}
+        appointment={apptDialog.item}
+        defaultDate={selectedDayKey || toDateKey(new Date())}
+        courseCodes={courseCodeOptions}
+        canManage={appts.canManage}
+        canDelete={apptDialog.item ? appts.canDeleteAppointment(apptDialog.item) : false}
+        onSave={appts.saveAppointment}
+        onDelete={appts.deleteAppointment}
+        onClose={() => setApptDialog({ open: false, item: null })}
+      />
 
       {/* Modal รายละเอียดอีเวนต์ Google Calendar */}
       <GoogleCalendarEventModal

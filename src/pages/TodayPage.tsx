@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import PixelCat from '../components/PixelCat'
 import { Badge, Button, Card, EmptyState, Skeleton } from '../components/ui'
 import { useAuth } from '../lib/auth'
+import { formatApptTimeLabel, toDateKey, useAppointments } from '../lib/appointments'
 import {
   formatDateTimeThai,
   formatFullDateThai,
@@ -51,6 +52,8 @@ function getStatusMeta(status: TaskStatus) {
 export function TodayPage() {
   const { user, displayName, activeGroup, currentRole } = useAuth()
   const gcal = useGoogleCalendar()
+  const appts = useAppointments()
+  const todayAppts = appts.byDate.get(toDateKey(new Date())) ?? []
   const [sessions, setSessions] = useState<CourseScheduleItem[]>([])
   const [routines, setRoutines] = useState<RoutineItem[]>([])
   const [tasks, setTasks] = useState<TaskItem[]>([])
@@ -280,6 +283,42 @@ export function TodayPage() {
                 </div>
               </div>
             )}
+
+            <div className="mt-5 border-t border-line pt-4">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-bold text-ink-secondary uppercase">
+                  🤝 นัดหมายวันนี้ ({todayAppts.length})
+                </h3>
+                <Link
+                  to="/schedule"
+                  className="inline-flex min-h-[44px] items-center text-[11px] font-bold text-primary hover:underline sm:min-h-0"
+                >
+                  + เพิ่มนัด
+                </Link>
+              </div>
+              {todayAppts.length === 0 ? (
+                <p className="mt-1.5 text-xs text-ink-muted">ไม่มีนัดหมายในวันนี้</p>
+              ) : (
+                <div className="mt-2 space-y-2">
+                  {todayAppts.map((a) => (
+                    <div
+                      key={`today-appt-${a.id}`}
+                      className="rounded-lg border-l-4 border-accent-amber bg-accent-amber-soft/60 px-3 py-2 text-xs"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-ink">{a.title}</span>
+                        <span className="shrink-0 font-mono text-[11px] text-ink-secondary">
+                          {formatApptTimeLabel(a)}
+                        </span>
+                      </div>
+                      {a.location && (
+                        <p className="mt-0.5 text-ink-secondary">📍 {a.location}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <div className="mt-5 border-t border-line pt-4">
               <div className="flex items-center justify-between gap-2">

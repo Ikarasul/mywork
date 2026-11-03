@@ -10,6 +10,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import AppointmentDialog from '../components/AppointmentDialog'
 import CourseDialog from '../components/CourseDialog'
 import GoogleCalendarSyncBar, {
   GoogleCalendarEventModal,
@@ -30,6 +31,13 @@ import {
   getRelativeCountdownThai,
   getTodayDayOfWeek,
 } from '../lib/dateThai'
+import {
+  dateKeyToDay,
+  formatApptTimeLabel,
+  getWeekDateKeys,
+  toDateKey,
+  useAppointments,
+} from '../lib/appointments'
 import { useGoogleCalendar } from '../lib/googleCalendar'
 import {
   COURSE_COLOR_PALETTE,
@@ -50,6 +58,7 @@ import {
 } from '../lib/storage'
 import { supabase } from '../lib/supabase'
 import type {
+  AppointmentItem,
   CourseLinkItem,
   CourseScheduleItem,
   DayOfWeek,
@@ -175,6 +184,11 @@ export function ClassSchedulePage() {
   const { user, activeGroup, members, currentRole, refreshGroupContext } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const gcal = useGoogleCalendar()
+  const appts = useAppointments()
+  const [apptDialog, setApptDialog] = useState<{ open: boolean; item: AppointmentItem | null }>({
+    open: false,
+    item: null,
+  })
   const [selectedGcalEvent, setSelectedGcalEvent] = useState<GoogleCalendarEventItem | null>(
     null,
   )
@@ -312,6 +326,29 @@ export function ClassSchedulePage() {
   const courseColorMap = useMemo(() => {
     return buildCourseColorMap(sessions)
   }, [sessions])
+
+  // นัดหมายของสัปดาห์นี้ จัดกลุ่มตามวัน (แสดงซ้อนในตารางรายสัปดาห์)
+  const weekDateKeys = useMemo(() => getWeekDateKeys(new Date()), [])
+  const weekApptsByDay = useMemo(() => {
+    const map = new Map<DayOfWeek, AppointmentItem[]>()
+    for (const key of weekDateKeys) {
+      const list = appts.byDate.get(key)
+      if (list && list.length > 0) map.set(dateKeyToDay(key), list)
+    }
+    return map
+  }, [weekDateKeys, appts.byDate])
+  const weekApptCount = useMemo(
+    () => Array.from(weekApptsByDay.values()).reduce((n, l) => n + l.length, 0),
+    [weekApptsByDay],
+  )
+  const courseCodeOptions = useMemo(
+    () => Array.from(new Set(sessions.map((s) => s.course_code.toUpperCase()))).sort(),
+    [sessions],
+  )
+
+  function openApptDialog(item: AppointmentItem | null) {
+    setApptDialog({ open: true, item })
+  }
 
   // สรุปจำนวนงานค้างและนัดสอบของแต่ละรหัสวิชา เพื่อแสดงป้ายเล็กบนบล็อกตารางรายสัปดาห์
   const courseTaskStatsMap = useMemo(() => {
@@ -754,6 +791,10 @@ export function ClassSchedulePage() {
       }
     }
 
+    const apptAllDay = daysToShow.flatMap((d) =>
+      (weekApptsByDay.get(d) ?? []).filter((a) => a.all_day).map((a) => ({ d, a })),
+    )
+
     return (
       <div className="overflow-x-auto rounded-xl border border-line">
         <div className="min-w-[920px]">
@@ -766,12 +807,26 @@ export function ClassSchedulePage() {
               <span>กิจกรรมตลอดทั้งวัน (แยกจากแกนเวลา 07:00–20:00)</span>
             </div>
 
-            {allDayByDay.size === 0 ? (
+            {allDayByDay.size === 0 && apptAllDay.length === 0 ? (
               <span className="text-[11px] text-ink-muted">
                 ไม่มีกิจกรรมทั้งวันในสัปดาห์นี้
               </span>
             ) : (
               <div className="flex flex-wrap items-center gap-1.5">
+                {apptAllDay.map(({ d, a }) => (
+                  <button
+                    key={`allday-appt-top-${d}-${a.id}`}
+                    type="button"
+                    onClick={() => openApptDialog(a)}
+                    className="inline-flex min-h-[32px] items-center gap-1.5 rounded-lg border border-accent-amber bg-accent-amber-soft px-2.5 py-1 text-[11px] font-bold text-accent-amber-fg shadow-2xs transition hover:opacity-90"
+                  >
+                    <span className="rounded bg-surface px-1 py-0.2 font-mono text-[10px] text-ink">
+                      {DAY_INFO[d].short}
+                    </span>
+                    <span>🤝 {a.title}</span>
+                    <span className="text-[10px] opacity-80">(ทั้งวัน)</span>
+                  </button>
+                ))}
                 {daysToShow.map((d) => {
                   const evs = allDayByDay.get(d) ?? []
                   return evs.map((ev, idx) => (
@@ -824,6 +879,9 @@ export function ClassSchedulePage() {
               const dayTimedGcalEvents = gcal.overlayVisible
                 ? gcal.events.filter((ev) => ev.day === dayCode && !ev.isAllDay)
                 : []
+              const dayAppts = weekApptsByDay.get(dayCode) ?? []
+              const dayAllDayAppts = dayAppts.filter((a) => a.all_day)
+              const dayTimedAppts = dayAppts.filter((a) => !a.all_day)
               const isToday = dayCode === todayCode
 
               return (
@@ -866,11 +924,21 @@ export function ClassSchedulePage() {
                       gridColumn: `2 / span ${TOTAL_HALF_HOUR_SLOTS}`,
                     }}
                   >
-                    {dayAllDayEvents.length > 0 && (
+                    {(dayAllDayEvents.length > 0 || dayAllDayAppts.length > 0) && (
                       <div className="flex flex-wrap items-center gap-1.5 border-b border-dashed border-line bg-surface-alt/60 px-2 py-1 text-[11px]">
                         <span className="rounded bg-surface px-1.5 py-0.5 font-bold text-ink-secondary">
                           📌 ทั้งวัน:
                         </span>
+                        {dayAllDayAppts.map((a) => (
+                          <button
+                            key={`day-allday-appt-${dayCode}-${a.id}`}
+                            type="button"
+                            onClick={() => openApptDialog(a)}
+                            className="inline-flex items-center gap-1 rounded-md border border-accent-amber bg-accent-amber-soft px-2 py-0.5 font-bold text-accent-amber-fg hover:opacity-90"
+                          >
+                            <span>🤝 {a.title}</span>
+                          </button>
+                        ))}
                         {dayAllDayEvents.map((ev, aIdx) => (
                           <button
                             key={`day-allday-${dayCode}-${ev.id}-${aIdx}`}
@@ -1098,6 +1166,42 @@ export function ClassSchedulePage() {
                           </div>
                         )
                       })}
+                      {/* นัดหมายของกลุ่มที่มีเวลา (แถวที่ 3 ในวันเดียวกัน คลิกเพื่อดู/แก้ไข) */}
+                      {dayTimedAppts.map((a) => {
+                        const startMin = Math.max(
+                          GRID_START_MIN,
+                          Math.min(GRID_END_MIN - 30, timeToMinutes(a.start_time)),
+                        )
+                        const endMin = Math.max(
+                          startMin + 30,
+                          Math.min(GRID_END_MIN, timeToMinutes(a.end_time)),
+                        )
+                        const startSlot = Math.floor((startMin - GRID_START_MIN) / 30) + 1
+                        const spanSlots = Math.max(1, Math.ceil((endMin - startMin) / 30))
+                        return (
+                          <button
+                            key={`appt-${a.id}`}
+                            type="button"
+                            style={{
+                              gridColumn: `${startSlot} / span ${spanSlots}`,
+                              gridRow: 3,
+                            }}
+                            onClick={() => openApptDialog(a)}
+                            title={`${a.title} • ${a.start_time}–${a.end_time}${a.location ? ` • ${a.location}` : ''}`}
+                            className="z-10 mx-0.5 min-h-[44px] rounded-xl border-l-4 border-accent-amber bg-accent-amber-soft p-1.5 text-left text-[11px] text-accent-amber-fg shadow-2xs transition hover:opacity-95 focus:ring-2 focus:ring-primary focus:outline-none"
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="truncate font-bold">🤝 {a.title}</span>
+                              <span className="shrink-0 font-mono text-[10px]">
+                                {a.start_time}–{a.end_time}
+                              </span>
+                            </div>
+                            {a.location && (
+                              <div className="truncate text-[10px] opacity-90">📍 {a.location}</div>
+                            )}
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
                 </div>
@@ -1151,6 +1255,20 @@ export function ClassSchedulePage() {
                 </option>
               ))}
             </select>
+
+            <button
+              type="button"
+              onClick={() => openApptDialog(null)}
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-accent-amber bg-accent-amber-soft px-3 py-1.5 text-xs font-bold text-accent-amber-fg shadow-2xs transition hover:opacity-90 sm:min-h-[38px]"
+            >
+              <span>🤝</span>
+              <span>+ เพิ่มนัด</span>
+              {weekApptCount > 0 && (
+                <span className="rounded-full bg-surface px-1.5 py-0.5 font-mono text-[10px] text-ink">
+                  {weekApptCount}
+                </span>
+              )}
+            </button>
 
             <div className="inline-flex rounded-xl border border-line bg-surface-alt p-1">
               <button
@@ -1499,6 +1617,23 @@ export function ClassSchedulePage() {
         )}
       </Card>
 
+      {/* ป็อปอัพเพิ่ม/แก้ไข/ลบนัดหมายของกลุ่ม */}
+      <AppointmentDialog
+        open={apptDialog.open}
+        appointment={apptDialog.item}
+        defaultDate={toDateKey(new Date())}
+        courseCodes={courseCodeOptions}
+        canManage={appts.canManage}
+        canDelete={apptDialog.item ? appts.canDeleteAppointment(apptDialog.item) : false}
+        onSave={appts.saveAppointment}
+        onDelete={appts.deleteAppointment}
+        onClose={() => setApptDialog({ open: false, item: null })}
+      />
+
+      {appts.error && (
+        <Toast tone="danger" message={appts.error} />
+      )}
+
       {/* ป็อปอัพรายละเอียดวิชา (CourseDialog) เปิดผ่าน ?course=<id> */}
       <CourseDialog
         open={Boolean(selectedCourseItem)}
@@ -1731,6 +1866,25 @@ export function ClassSchedulePage() {
                     )
                   })
               )}
+
+              {/* นัดหมายของกลุ่มในวันที่เลือกบนมือถือ (เฉพาะสัปดาห์นี้) */}
+              {(weekApptsByDay.get(selectedMobileDay) ?? []).map((a) => (
+                <button
+                  key={`mob-appt-${a.id}`}
+                  type="button"
+                  onClick={() => openApptDialog(a)}
+                  className="block w-full rounded-xl border-l-4 border-accent-amber bg-accent-amber-soft p-3.5 text-left text-accent-amber-fg shadow-2xs"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <Badge tone="amber">🤝 นัดหมาย</Badge>
+                    <span className="font-mono text-xs font-bold">{formatApptTimeLabel(a)}</span>
+                  </div>
+                  <p className="mt-1.5 text-sm font-bold text-ink">{a.title}</p>
+                  {a.location && (
+                    <p className="mt-0.5 text-xs text-ink-secondary">📍 {a.location}</p>
+                  )}
+                </button>
+              ))}
 
               {/* อีเวนต์ที่มีเวลาจาก Google Calendar ของวันที่เลือกบนมือถือ */}
               {gcal.overlayVisible &&

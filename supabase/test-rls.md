@@ -162,3 +162,11 @@
    console.log(data.courses)
    ```
    * **ผลลัพธ์ที่ต้องได้:** ในแต่ละออบเจกต์ของ `data.courses` มีเฉพาะ `id`, `course_code`, `course_name`, `credits`, `section`, `instructor`, `online_link`, `color`, `location_text` **โดยไม่มีคีย์ `links` และไม่มีคีย์ `notes` อยู่ใน JSON ที่ส่งกลับมาจากฐานข้อมูลเลย**
+
+## 6. ทดสอบนัดหมาย (migration-appointments.sql)
+
+1. รัน `supabase/migration-appointments.sql` ใน SQL Editor
+2. ล็อกอินเป็น member/admin/owner → หน้า /schedule กด `+ เพิ่มนัด` บันทึกสำเร็จ และนัดแสดงในตารางรายสัปดาห์ ปฏิทิน และหน้าวันนี้
+3. ล็อกอินเป็นผู้ชม (viewer ไม่มีรหัสเชิญ) → เพิ่ม/แก้ไข/ลบนัดต้องถูกปฏิเสธ (insert ติด RLS, update/delete ไม่มีแถวถูกแก้)
+4. member ลบนัดของคนอื่นต้องไม่สำเร็จ แต่ลบนัดที่ตนสร้างได้; owner/admin ลบได้ทุกนัด
+5. เปิด `/share/:token` โดยไม่ล็อกอิน → ต้องไม่เห็นนัดหมาย (ตาราง appointments ไม่ได้ GRANT ให้ anon และ get_shared_view ไม่ได้แก้)
