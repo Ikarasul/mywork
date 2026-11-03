@@ -1,0 +1,27 @@
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import Navbar from './components/Navbar'
+import LifeSchedulePage from './pages/LifeSchedulePage'
+import ClassSchedulePage from './pages/ClassSchedulePage'
+import TasksPage from './pages/TasksPage'
+import GroupChatPage from './pages/GroupChatPage'
+
+export function App() {
+  return (
+    <BrowserRouter>
+      <div className="min-h-screen bg-slate-50 text-slate-900">
+        <Navbar />
+        <main className="mx-auto max-w-6xl px-4 py-6">
+          <Routes>
+            <Route path="/" element={<Navigate to="/life" replace />} />
+            <Route path="/life" element={<LifeSchedulePage />} />
+            <Route path="/schedule" element={<ClassSchedulePage />} />
+            <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/chat" element={<GroupChatPage />} />
+          </Routes>
+        </main>
+      </div>
+    </BrowserRouter>
+  )
+}
+
+export default App
