@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import Navbar from './components/Navbar'
+import SupabaseConfigBanner from './components/SupabaseConfigBanner'
 import LifeSchedulePage from './pages/LifeSchedulePage'
 import ClassSchedulePage from './pages/ClassSchedulePage'
 import TasksPage from './pages/TasksPage'
@@ -10,6 +11,7 @@ export function App() {
     <BrowserRouter>
       <div className="min-h-screen bg-slate-50 text-slate-900">
         <Navbar />
+        <SupabaseConfigBanner />
         <main className="mx-auto max-w-6xl px-4 py-6">
           <Routes>
             <Route path="/" element={<Navigate to="/life" replace />} />
