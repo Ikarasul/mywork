@@ -15,6 +15,7 @@ import CourseDialog from '../components/CourseDialog'
 import GoogleCalendarSyncBar, {
   GoogleCalendarEventModal,
 } from '../components/GoogleCalendarSyncBar'
+import RescheduleDialog, { type RescheduleSubmitPayload } from '../components/RescheduleDialog'
 import {
   Badge,
   Button,
@@ -39,6 +40,11 @@ import {
   useAppointments,
 } from '../lib/appointments'
 import { useGoogleCalendar } from '../lib/googleCalendar'
+import {
+  minutesToTimeStr,
+  shiftTimeRange,
+  useClassReschedules,
+} from '../lib/reschedules'
 import {
   COURSE_COLOR_PALETTE,
   DEFAULT_SEMESTER,
@@ -185,10 +191,32 @@ export function ClassSchedulePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const gcal = useGoogleCalendar()
   const appts = useAppointments()
-  const [apptDialog, setApptDialog] = useState<{ open: boolean; item: AppointmentItem | null }>({
+  const [apptDialog, setApptDialog] = useState<{
+    open: boolean
+    item: AppointmentItem | null
+    defaultDate?: string
+    defaultStart?: string
+    defaultEnd?: string
+  }>({
     open: false,
     item: null,
   })
+  const [rescheduleModal, setRescheduleModal] = useState<{
+    session: CourseScheduleItem
+    originalDate: string
+    targetDate?: string
+    targetStart?: string
+    targetEnd?: string
+  } | null>(null)
+  const [draggingGridItem, setDraggingGridItem] = useState<
+    | { kind: 'class'; session: CourseScheduleItem; spanSlots: number }
+    | { kind: 'appt'; appt: AppointmentItem; spanSlots: number }
+    | null
+  >(null)
+  const [hoverSlot, setHoverSlot] = useState<{
+    day: DayOfWeek
+    startSlot: number
+  } | null>(null)
   const [selectedGcalEvent, setSelectedGcalEvent] = useState<GoogleCalendarEventItem | null>(
     null,
   )
@@ -328,7 +356,21 @@ export function ClassSchedulePage() {
   }, [sessions])
 
   // นัดหมายของสัปดาห์นี้ จัดกลุ่มตามวัน (แสดงซ้อนในตารางรายสัปดาห์)
+  const reschedules = useClassReschedules(semester)
   const weekDateKeys = useMemo(() => getWeekDateKeys(new Date()), [])
+  const weekDateByDay = useMemo(() => {
+    const map = new Map<DayOfWeek, string>()
+    DAYS_ORDER.forEach((d, idx) => {
+      if (weekDateKeys[idx]) map.set(d, weekDateKeys[idx])
+    })
+    return map
+  }, [weekDateKeys])
+
+  const { sessions: effectiveWeekSessions, weekOverrides } = useMemo(
+    () => reschedules.getEffectiveSessionsForWeek(sessions, weekDateKeys),
+    [reschedules, sessions, weekDateKeys],
+  )
+
   const weekApptsByDay = useMemo(() => {
     const map = new Map<DayOfWeek, AppointmentItem[]>()
     for (const key of weekDateKeys) {
@@ -346,8 +388,161 @@ export function ClassSchedulePage() {
     [sessions],
   )
 
-  function openApptDialog(item: AppointmentItem | null) {
-    setApptDialog({ open: true, item })
+  function openApptDialog(
+    item: AppointmentItem | null,
+    defaults?: { date?: string; start?: string; end?: string },
+  ) {
+    setApptDialog({
+      open: true,
+      item,
+      defaultDate: defaults?.date,
+      defaultStart: defaults?.start,
+      defaultEnd: defaults?.end,
+    })
+  }
+
+  function openRescheduleDialog(
+    sess: CourseScheduleItem,
+    defaults?: { targetDate?: string; targetStart?: string; targetEnd?: string },
+  ) {
+    const origDate =
+      sess.rescheduledInfo?.originalDate ??
+      weekDateByDay.get(sess.day) ??
+      toDateKey(new Date())
+    setRescheduleModal({
+      session: sess,
+      originalDate: origDate,
+      targetDate: defaults?.targetDate ?? (weekDateByDay.get(sess.day) || origDate),
+      targetStart: defaults?.targetStart ?? sess.start,
+      targetEnd: defaults?.targetEnd ?? sess.end,
+    })
+  }
+
+  async function handleGridSlotDrop(targetDay: DayOfWeek, slotIndex: number) {
+    setHoverSlot(null)
+    if (!draggingGridItem) return
+    const dragged = draggingGridItem
+    setDraggingGridItem(null)
+
+    const targetDate = weekDateByDay.get(targetDay) ?? toDateKey(new Date())
+    const dropStartMin = GRID_START_MIN + slotIndex * 30
+
+    if (dragged.kind === 'appt') {
+      if (!appts.canManage) return
+      const { start: newStart, end: newEnd } = shiftTimeRange(
+        dragged.appt.start_time,
+        dragged.appt.end_time,
+        dropStartMin,
+        GRID_END_MIN,
+        GRID_START_MIN,
+      )
+      if (
+        dragged.appt.appt_date === targetDate &&
+        dragged.appt.start_time === newStart &&
+        dragged.appt.end_time === newEnd
+      ) {
+        return
+      }
+      await appts.saveAppointment(
+        {
+          title: dragged.appt.title,
+          appt_date: targetDate,
+          start_time: newStart,
+          end_time: newEnd,
+          all_day: false,
+          location: dragged.appt.location,
+          notes: dragged.appt.notes,
+          course_code: dragged.appt.course_code,
+        },
+        dragged.appt.id,
+      )
+      setStatusMessage(
+        `ย้ายนัดหมาย "${dragged.appt.title}" ไปวัน${DAY_INFO[targetDay].full} เวลา ${newStart}–${newEnd} เรียบร้อยแล้ว`,
+      )
+    } else if (dragged.kind === 'class') {
+      if (!canEdit) return
+      const { start: newStart, end: newEnd } = shiftTimeRange(
+        dragged.session.start,
+        dragged.session.end,
+        dropStartMin,
+        GRID_END_MIN,
+        GRID_START_MIN,
+      )
+      if (
+        dragged.session.day === targetDay &&
+        dragged.session.start === newStart &&
+        dragged.session.end === newEnd
+      ) {
+        return
+      }
+      openRescheduleDialog(dragged.session, {
+        targetDate,
+        targetStart: newStart,
+        targetEnd: newEnd,
+      })
+    }
+  }
+
+  async function handleRescheduleSubmit(payload: RescheduleSubmitPayload) {
+    if (!rescheduleModal) return
+    const targetSess = rescheduleModal.session
+    const origDay = targetSess.rescheduledInfo?.originalDay ?? targetSess.day
+    const origStart =
+      targetSess.rescheduledInfo?.originalStart ?? targetSess.start
+    const origEnd = targetSess.rescheduledInfo?.originalEnd ?? targetSess.end
+    const origDate =
+      targetSess.rescheduledInfo?.originalDate ?? rescheduleModal.originalDate
+
+    if (payload.mode === 'permanent') {
+      const updated = sessions.map((s) => {
+        if (
+          s.course_code.toUpperCase() === targetSess.course_code.toUpperCase() &&
+          s.day === origDay &&
+          s.start === origStart
+        ) {
+          return {
+            ...s,
+            day: payload.newDay,
+            start: payload.newStart,
+            end: payload.newEnd,
+            room: payload.newRoom || s.room,
+          }
+        }
+        return s
+      })
+      await storage.set(storageKey, updated)
+      if (targetSess.rescheduledInfo?.overrideId) {
+        await reschedules.removeOverride(targetSess.rescheduledInfo.overrideId)
+      }
+      setSessions(updated)
+      setStatusMessage(
+        `เปลี่ยนตารางหลักวิชา ${targetSess.course_code} เป็นวัน${DAY_INFO[payload.newDay].full} เวลา ${payload.newStart}–${payload.newEnd} เรียบร้อยแล้ว`,
+      )
+    } else {
+      await reschedules.saveOverride(
+        {
+          course_code: targetSess.course_code,
+          course_name: targetSess.course_name,
+          section: targetSess.section,
+          original_date: origDate,
+          original_day: origDay,
+          original_start: origStart,
+          original_end: origEnd,
+          canceled: payload.mode === 'cancel',
+          new_date: payload.newDate,
+          new_start: payload.newStart,
+          new_end: payload.newEnd,
+          new_room: payload.newRoom,
+          reason: payload.reason,
+        },
+        targetSess.rescheduledInfo?.overrideId,
+      )
+      setStatusMessage(
+        payload.mode === 'cancel'
+          ? `บันทึกการงดคลาสวิชา ${targetSess.course_code} ในวันที่ ${origDate} เรียบร้อยแล้ว`
+          : `ย้ายคาบวิชา ${targetSess.course_code} ไปวัน${DAY_INFO[payload.newDay].full} (${payload.newDate}) เวลา ${payload.newStart}–${payload.newEnd} เรียบร้อยแล้ว`,
+      )
+    }
   }
 
   // สรุปจำนวนงานค้างและนัดสอบของแต่ละรหัสวิชา เพื่อแสดงป้ายเล็กบนบล็อกตารางรายสัปดาห์
@@ -848,6 +1043,58 @@ export function ClassSchedulePage() {
             )}
           </div>
 
+          {/* แถบแนะนำการลากย้ายคาบเรียน/นัดหมาย + รายการคาบที่ถูกย้ายในสัปดาห์นี้ */}
+          {(canEdit || appts.canManage) && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface px-3 py-2 text-[11px] text-ink-secondary">
+              <span>
+                💡 <strong>ลากบล็อกวิชาหรือนัดหมาย</strong> ไปวางในวัน/ช่องเวลาใหม่เพื่อย้ายคาบ (ล็อกทีละ 30 นาที) หรือ <strong>คลิกช่องว่างในตาราง</strong> เพื่อเพิ่มนัดใหม่ทันที
+              </span>
+              {weekOverrides.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void reschedules.clearAllOverrides()
+                    setStatusMessage('คืนค่าคาบเรียนที่ย้ายชั่วคราวทั้งหมดกลับสู่ตารางปกติแล้ว')
+                  }}
+                  className="font-bold text-primary hover:underline"
+                >
+                  ↩️ คืนค่าคาบที่ย้ายทั้งหมดในสัปดาห์นี้ ({weekOverrides.length})
+                </button>
+              )}
+            </div>
+          )}
+
+          {weekOverrides.some((o) => o.canceled) && (
+            <div className="flex flex-wrap items-center gap-2 border-b border-dashed border-accent-amber bg-accent-amber-soft/25 px-3 py-1.5 text-[11px]">
+              <span className="font-bold text-accent-amber-fg">⏸️ คาบที่งดในสัปดาห์นี้:</span>
+              {weekOverrides
+                .filter((o) => o.canceled)
+                .map((ov) => (
+                  <span
+                    key={ov.id}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2 py-0.5 text-ink"
+                  >
+                    <span className="font-mono font-bold text-primary">{ov.course_code}</span>
+                    <span>
+                      (วัน{DAY_INFO[ov.original_day].short} {ov.original_start}–{ov.original_end})
+                    </span>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void reschedules.removeOverride(ov.id)
+                          setStatusMessage(`คืนค่าคาบเรียนวิชา ${ov.course_code} แล้ว`)
+                        }}
+                        className="font-bold text-primary hover:underline"
+                      >
+                        ↩️ คืนค่า
+                      </button>
+                    )}
+                  </span>
+                ))}
+            </div>
+          )}
+
           {/* แถวหัวตารางแสดงแกนเวลา 07:00 - 20:00 ด้วย CSS Grid */}
           <div
             className="grid border-b border-line bg-surface-alt text-[11px] font-semibold text-ink-secondary"
@@ -872,7 +1119,7 @@ export function ClassSchedulePage() {
           {/* แถวแต่ละวัน */}
           <div className="divide-y divide-line">
             {daysToShow.map((dayCode) => {
-              const daySessions = sessions.filter((s) => s.day === dayCode)
+              const daySessions = effectiveWeekSessions.filter((s) => s.day === dayCode)
               const dayAllDayEvents = gcal.overlayVisible
                 ? gcal.events.filter((ev) => ev.day === dayCode && ev.isAllDay)
                 : []
@@ -911,7 +1158,7 @@ export function ClassSchedulePage() {
                           <span>{DAY_INFO[dayCode].full}</span>
                         </div>
                         <div className="font-mono text-[10px] text-ink-muted">
-                          {isToday ? '● วันนี้' : dayCode}
+                          {isToday ? '● วันนี้' : weekDateByDay.get(dayCode)?.slice(8, 10) || dayCode}
                         </div>
                       </div>
                     </div>
@@ -967,17 +1214,97 @@ export function ClassSchedulePage() {
                         />
                       )}
 
-                      {/* เส้นแบ่งชั่วโมงพื้นหลัง */}
-                      {Array.from({ length: 13 }).map((_, hIdx) => (
+                      {/* ช่องเวลาละ 30 นาที (26 ช่อง) สำหรับรองรับการลากวาง (Drop Target) และคลิกช่องว่างเพื่อเพิ่มนัด */}
+                      {Array.from({ length: TOTAL_HALF_HOUR_SLOTS }).map((_, slotIdx) => {
+                        const slotStartMin = GRID_START_MIN + slotIdx * 30
+                        const slotStartLabel = minutesToTimeStr(slotStartMin)
+                        const slotEndLabel = minutesToTimeStr(
+                          Math.min(GRID_END_MIN, slotStartMin + 60),
+                        )
+                        const isHourEnd = slotIdx % 2 === 1
+                        return (
+                          <div
+                            key={`slot-${dayCode}-${slotIdx}`}
+                            style={{
+                              gridColumn: `${slotIdx + 1} / span 1`,
+                              gridRow: '1 / span 3',
+                            }}
+                            onDragOver={(e) => {
+                              if (!draggingGridItem) return
+                              e.preventDefault()
+                              const clampedSlot = Math.max(
+                                1,
+                                Math.min(
+                                  TOTAL_HALF_HOUR_SLOTS - draggingGridItem.spanSlots + 1,
+                                  slotIdx + 1,
+                                ),
+                              )
+                              if (
+                                !hoverSlot ||
+                                hoverSlot.day !== dayCode ||
+                                hoverSlot.startSlot !== clampedSlot
+                              ) {
+                                setHoverSlot({ day: dayCode, startSlot: clampedSlot })
+                              }
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault()
+                              const clampedIdx = draggingGridItem
+                                ? Math.max(
+                                    0,
+                                    Math.min(
+                                      TOTAL_HALF_HOUR_SLOTS - draggingGridItem.spanSlots,
+                                      slotIdx,
+                                    ),
+                                  )
+                                : slotIdx
+                              void handleGridSlotDrop(dayCode, clampedIdx)
+                            }}
+                            onClick={() => {
+                              if (!appts.canManage) return
+                              openApptDialog(null, {
+                                date: weekDateByDay.get(dayCode) ?? toDateKey(new Date()),
+                                start: slotStartLabel,
+                                end: slotEndLabel,
+                              })
+                            }}
+                            title={
+                              appts.canManage
+                                ? `คลิกเพื่อเพิ่มนัดวัน${DAY_INFO[dayCode].full} เวลา ${slotStartLabel}–${slotEndLabel}`
+                                : undefined
+                            }
+                            className={`h-full min-h-[78px] transition-colors ${
+                              isHourEnd ? 'border-r border-dashed border-line' : ''
+                            } ${
+                              appts.canManage ? 'cursor-cell hover:bg-primary-soft/20' : ''
+                            }`}
+                          />
+                        )
+                      })}
+
+                      {/* กรอบตัวอย่างตำแหน่งที่จะวางเมื่อกำลังลากบล็อก (Drop Preview) */}
+                      {draggingGridItem && hoverSlot && hoverSlot.day === dayCode && (
                         <div
-                          key={`line-${dayCode}-${hIdx}`}
                           style={{
-                            gridColumn: `${hIdx * 2 + 1} / span 2`,
-                            gridRow: '1 / span 2',
+                            gridColumn: `${hoverSlot.startSlot} / span ${draggingGridItem.spanSlots}`,
+                            gridRow: draggingGridItem.kind === 'appt' ? 3 : 1,
                           }}
-                          className="pointer-events-none h-full border-r border-dashed border-line"
-                        />
-                      ))}
+                          className="pointer-events-none z-20 mx-0.5 flex min-h-[54px] items-center justify-center rounded-xl border-2 border-dashed border-primary bg-primary-soft/60 px-2 py-1 text-[11px] font-bold text-primary shadow-sm"
+                        >
+                          <span>
+                            วางที่นี่ ({DAY_INFO[dayCode].short}{' '}
+                            {minutesToTimeStr(
+                              GRID_START_MIN + (hoverSlot.startSlot - 1) * 30,
+                            )}
+                            –
+                            {minutesToTimeStr(
+                              GRID_START_MIN +
+                                (hoverSlot.startSlot - 1 + draggingGridItem.spanSlots) * 30,
+                            )}
+                            )
+                          </span>
+                        </div>
+                      )}
 
                       {/* กล่องรายวิชาที่วางตามตำแหน่งเวลาบน CSS Grid */}
                       {daySessions.map((sess, sIdx) => {
@@ -1007,19 +1334,37 @@ export function ClassSchedulePage() {
                           sess.room,
                           sess.location_text,
                         )
-                        const tooltipSummary = `${sess.course_code} ${sess.course_name} • เวลา ${sess.start}–${sess.end} น. • ห้อง ${fullLocation}`
+                        const tooltipSummary = `${sess.course_code} ${sess.course_name} • เวลา ${sess.start}–${sess.end} น. • ห้อง ${fullLocation}${canEdit ? ' (ลากเพื่อย้ายวัน/เวลา หรือคลิกเพื่อดูรายละเอียด)' : ''}`
 
                         return (
                           <div
                             key={`${sess.course_code}-${sess.day}-${sess.start}-${sIdx}`}
                             role="button"
                             tabIndex={0}
+                            draggable={canEdit}
+                            onDragStart={(e) => {
+                              if (!canEdit) return
+                              e.dataTransfer.effectAllowed = 'move'
+                              e.dataTransfer.setData('text/plain', sess.course_code)
+                              setDraggingGridItem({
+                                kind: 'class',
+                                session: sess,
+                                spanSlots,
+                              })
+                            }}
+                            onDragEnd={() => {
+                              setDraggingGridItem(null)
+                              setHoverSlot(null)
+                            }}
                             aria-label={`เปิดรายละเอียดวิชา ${sess.course_code} ${sess.course_name}`}
                             style={{
                               gridColumn: `${startSlot} / span ${spanSlots}`,
                               gridRow: 1,
                             }}
-                            onClick={(e) => handleOpenCoursePopup(sess, e)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleOpenCoursePopup(sess, e)
+                            }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
                                 e.preventDefault()
@@ -1027,7 +1372,9 @@ export function ClassSchedulePage() {
                               }
                             }}
                             title={tooltipSummary}
-                            className={`group relative z-10 mx-0.5 flex cursor-pointer flex-col justify-between rounded-xl border-l-4 p-2 text-xs shadow-2xs transition focus:ring-2 focus:ring-primary focus:outline-none ${colorTheme.bg} ${colorTheme.border} ${colorTheme.text}`}
+                            className={`group relative z-10 mx-0.5 flex cursor-pointer flex-col justify-between rounded-xl border-l-4 p-2 text-xs shadow-2xs transition focus:ring-2 focus:ring-primary focus:outline-none ${colorTheme.bg} ${colorTheme.border} ${colorTheme.text} ${
+                              canEdit ? 'active:cursor-grabbing' : ''
+                            }`}
                           >
                             {/* Tooltip บนคอมพิวเตอร์เมื่อชื่อวิชาถูกตัด: แสดงชื่อเต็ม ห้องเต็ม และเวลาเรียน */}
                             <div
@@ -1046,6 +1393,11 @@ export function ClassSchedulePage() {
                               <div className="mt-0.5 text-ink-secondary">
                                 📍 {fullLocation}
                               </div>
+                              {sess.rescheduledInfo && (
+                                <div className="mt-1 font-semibold text-accent-amber-fg">
+                                  🔄 ย้ายมาจากวัน{DAY_INFO[sess.rescheduledInfo.originalDay].full} ({sess.rescheduledInfo.originalStart}–{sess.rescheduledInfo.originalEnd})
+                                </div>
+                              )}
                             </div>
 
                             <div>
@@ -1053,11 +1405,18 @@ export function ClassSchedulePage() {
                                 <span className="font-mono text-xs font-extrabold">
                                   {sess.course_code}
                                 </span>
-                                {sess.online_link && (
-                                  <span className="rounded bg-surface px-1.5 py-0.2 text-[10px] font-bold text-accent-mint">
-                                    มีเรียนออนไลน์
-                                  </span>
-                                )}
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {sess.rescheduledInfo && (
+                                    <span className="rounded bg-accent-amber px-1.5 py-0.2 text-[9px] font-extrabold text-ink-inverted">
+                                      🔄 ย้ายคาบ
+                                    </span>
+                                  )}
+                                  {sess.online_link && (
+                                    <span className="rounded bg-surface px-1.5 py-0.2 text-[10px] font-bold text-accent-mint">
+                                      มีเรียนออนไลน์
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                               <p className="mt-0.5 line-clamp-1 font-bold leading-snug">
                                 {sess.course_name}
@@ -1098,7 +1457,7 @@ export function ClassSchedulePage() {
                                 </div>
                               )}
 
-                            {(sess.online_url || sess.contact_url) && (
+                            {(sess.online_url || sess.contact_url || canEdit) && (
                               <div className="mt-1 flex flex-wrap items-center gap-1">
                                 {sess.online_url && (
                                   <a
@@ -1121,6 +1480,19 @@ export function ClassSchedulePage() {
                                   >
                                     💬 LINE
                                   </a>
+                                )}
+                                {canEdit && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      openRescheduleDialog(sess)
+                                    }}
+                                    title="ย้ายคาบเรียนหรือปรับเวลาเรียน"
+                                    className="inline-flex items-center gap-0.5 rounded bg-surface/90 px-1.5 py-0.5 text-[9px] font-bold text-ink shadow-2xs hover:bg-surface"
+                                  >
+                                    🔄 ย้ายคาบ
+                                  </button>
                                 )}
                               </div>
                             )}
@@ -1153,7 +1525,10 @@ export function ClassSchedulePage() {
                               gridColumn: `${startSlot} / span ${spanSlots}`,
                               gridRow: 2,
                             }}
-                            onClick={() => setSelectedGcalEvent(ev)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelectedGcalEvent(ev)
+                            }}
                             title={`[Google Calendar] ${ev.summary} (${ev.startTime}-${ev.endTime}) — คลิกเพื่อดูหรือแก้ไขใน Google Calendar`}
                             className="z-10 mx-0.5 cursor-pointer rounded-xl border border-dashed border-accent-sky bg-accent-sky-soft/75 p-1.5 text-[11px] text-accent-sky-fg shadow-2xs transition hover:opacity-95"
                           >
@@ -1166,7 +1541,7 @@ export function ClassSchedulePage() {
                           </div>
                         )
                       })}
-                      {/* นัดหมายของกลุ่มที่มีเวลา (แถวที่ 3 ในวันเดียวกัน คลิกเพื่อดู/แก้ไข) */}
+                      {/* นัดหมายของกลุ่มที่มีเวลา (แถวที่ 3 ในวันเดียวกัน ลากย้ายวัน/เวลาได้ หรือคลิกเพื่อดู/แก้ไข) */}
                       {dayTimedAppts.map((a) => {
                         const startMin = Math.max(
                           GRID_START_MIN,
@@ -1182,13 +1557,33 @@ export function ClassSchedulePage() {
                           <button
                             key={`appt-${a.id}`}
                             type="button"
+                            draggable={appts.canManage}
+                            onDragStart={(e) => {
+                              if (!appts.canManage) return
+                              e.dataTransfer.effectAllowed = 'move'
+                              e.dataTransfer.setData('text/plain', a.id)
+                              setDraggingGridItem({
+                                kind: 'appt',
+                                appt: a,
+                                spanSlots,
+                              })
+                            }}
+                            onDragEnd={() => {
+                              setDraggingGridItem(null)
+                              setHoverSlot(null)
+                            }}
                             style={{
                               gridColumn: `${startSlot} / span ${spanSlots}`,
                               gridRow: 3,
                             }}
-                            onClick={() => openApptDialog(a)}
-                            title={`${a.title} • ${a.start_time}–${a.end_time}${a.location ? ` • ${a.location}` : ''}`}
-                            className="z-10 mx-0.5 min-h-[44px] rounded-xl border-l-4 border-accent-amber bg-accent-amber-soft p-1.5 text-left text-[11px] text-accent-amber-fg shadow-2xs transition hover:opacity-95 focus:ring-2 focus:ring-primary focus:outline-none"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openApptDialog(a)
+                            }}
+                            title={`${a.title} • ${a.start_time}–${a.end_time}${a.location ? ` • ${a.location}` : ''}${appts.canManage ? ' (ลากเพื่อย้ายวัน/เวลา หรือคลิกเพื่อแก้ไข)' : ''}`}
+                            className={`z-10 mx-0.5 min-h-[44px] rounded-xl border-l-4 border-accent-amber bg-accent-amber-soft p-1.5 text-left text-[11px] text-accent-amber-fg shadow-2xs transition hover:opacity-95 focus:ring-2 focus:ring-primary focus:outline-none ${
+                              appts.canManage ? 'cursor-grab active:cursor-grabbing' : ''
+                            }`}
                           >
                             <div className="flex items-center justify-between gap-1">
                               <span className="truncate font-bold">🤝 {a.title}</span>
@@ -1621,13 +2016,32 @@ export function ClassSchedulePage() {
       <AppointmentDialog
         open={apptDialog.open}
         appointment={apptDialog.item}
-        defaultDate={toDateKey(new Date())}
+        defaultDate={apptDialog.defaultDate ?? toDateKey(new Date())}
+        defaultStartTime={apptDialog.defaultStart}
+        defaultEndTime={apptDialog.defaultEnd}
         courseCodes={courseCodeOptions}
         canManage={appts.canManage}
         canDelete={apptDialog.item ? appts.canDeleteAppointment(apptDialog.item) : false}
         onSave={appts.saveAppointment}
         onDelete={appts.deleteAppointment}
         onClose={() => setApptDialog({ open: false, item: null })}
+      />
+
+      {/* ป็อปอัพย้ายคาบเรียน / งดคลาส */}
+      <RescheduleDialog
+        open={Boolean(rescheduleModal)}
+        session={rescheduleModal?.session ?? null}
+        originalDate={rescheduleModal?.originalDate ?? toDateKey(new Date())}
+        initialTargetDate={rescheduleModal?.targetDate}
+        initialTargetStart={rescheduleModal?.targetStart}
+        initialTargetEnd={rescheduleModal?.targetEnd}
+        canManage={canEdit}
+        onClose={() => setRescheduleModal(null)}
+        onSubmit={handleRescheduleSubmit}
+        onRestoreOriginal={async (overrideId) => {
+          await reschedules.removeOverride(overrideId)
+          setStatusMessage('คืนค่าคาบเรียนกลับสู่ตารางเดิมแล้ว')
+        }}
       />
 
       {appts.error && (
@@ -1702,7 +2116,7 @@ export function ClassSchedulePage() {
               {DAYS_ORDER.map((d) => {
                 const isSelected = selectedMobileDay === d
                 const isToday = d === todayCode
-                const count = sessions.filter((s) => s.day === d).length
+                const count = effectiveWeekSessions.filter((s) => s.day === d).length
                 return (
                   <button
                     key={`mob-tab-${d}`}
@@ -1732,7 +2146,7 @@ export function ClassSchedulePage() {
                   )}
                 </h3>
                 <span className="text-xs text-ink-muted">
-                  {sessions.filter((s) => s.day === selectedMobileDay).length} คาบเรียน
+                  {effectiveWeekSessions.filter((s) => s.day === selectedMobileDay).length} คาบเรียน
                 </span>
               </div>
 
@@ -1763,14 +2177,14 @@ export function ClassSchedulePage() {
                   </div>
                 )}
 
-              {sessions.filter((s) => s.day === selectedMobileDay).length === 0 ? (
+              {effectiveWeekSessions.filter((s) => s.day === selectedMobileDay).length === 0 ? (
                 <EmptyState
                   mood="sleep"
                   title={`ไม่มีคาบเรียนในวัน${DAY_INFO[selectedMobileDay].full}`}
                   description="เลือกดูวันอื่นจากแท็บด้านบน หรือกดปุ่ม + มุมล่างขวาเพื่อเพิ่มวิชาเรียน"
                 />
               ) : (
-                sessions
+                effectiveWeekSessions
                   .filter((s) => s.day === selectedMobileDay)
                   .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start))
                   .map((sess, idx) => {
@@ -1795,14 +2209,24 @@ export function ClassSchedulePage() {
                         className={`cursor-pointer rounded-xl border-l-4 p-4 shadow-2xs transition focus:ring-2 focus:ring-primary focus:outline-none ${colorTheme.bg} ${colorTheme.border} ${colorTheme.text}`}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-mono text-sm font-extrabold">
-                            {sess.course_code}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-sm font-extrabold">
+                              {sess.course_code}
+                            </span>
+                            {sess.rescheduledInfo && (
+                              <Badge tone="amber">🔄 ย้ายคาบ</Badge>
+                            )}
+                          </div>
                           <span className="font-mono text-xs font-bold">
                             {sess.start} – {sess.end}
                           </span>
                         </div>
                         <p className="mt-1 text-sm font-bold">{sess.course_name}</p>
+                        {sess.rescheduledInfo && (
+                          <p className="mt-0.5 text-xs font-semibold opacity-90">
+                            ย้ายมาจากวัน{DAY_INFO[sess.rescheduledInfo.originalDay].full} ({sess.rescheduledInfo.originalStart}–{sess.rescheduledInfo.originalEnd})
+                          </p>
+                        )}
                         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
                           <span>📍 ห้อง {sess.room || '-'} (Sec {sess.section})</span>
                           {sess.online_link && (
@@ -1834,31 +2258,45 @@ export function ClassSchedulePage() {
                             </div>
                           )}
 
-                        {(sess.online_url || sess.contact_url) && (
-                          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line/40 pt-2.5">
-                            {sess.online_url && (
-                              <a
-                                href={sess.online_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-accent-pink shadow-2xs hover:underline"
+                        {(sess.online_url || sess.contact_url || canEdit) && (
+                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line/40 pt-2.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              {sess.online_url && (
+                                <a
+                                  href={sess.online_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-accent-pink shadow-2xs hover:underline"
+                                >
+                                  <span>🔗 Click online classes</span>
+                                  <span>↗</span>
+                                </a>
+                              )}
+                              {sess.contact_url && (
+                                <a
+                                  href={sess.contact_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-status-success shadow-2xs hover:underline"
+                                >
+                                  <span>💬 Contact (LINE กลุ่ม)</span>
+                                  <span>↗</span>
+                                </a>
+                              )}
+                            </div>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  openRescheduleDialog(sess)
+                                }}
+                                className="inline-flex items-center gap-1 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-ink shadow-2xs hover:bg-surface-hover"
                               >
-                                <span>🔗 Click online classes</span>
-                                <span>↗</span>
-                              </a>
-                            )}
-                            {sess.contact_url && (
-                              <a
-                                href={sess.contact_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-status-success shadow-2xs hover:underline"
-                              >
-                                <span>💬 Contact (LINE กลุ่ม)</span>
-                                <span>↗</span>
-                              </a>
+                                🔄 ย้ายคาบ
+                              </button>
                             )}
                           </div>
                         )}

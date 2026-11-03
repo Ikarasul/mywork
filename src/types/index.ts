@@ -87,6 +87,40 @@ export interface CourseScheduleItem {
   notes?: string
   location_text?: string
   links?: CourseLinkItem[]
+  /** ข้อมูลการย้ายคาบชั่วคราว (เมื่อคาบนี้ถูกย้ายมาในสัปดาห์/วันที่กำลังดู) */
+  rescheduledInfo?: {
+    overrideId: string
+    originalDate: string
+    originalDay: DayOfWeek
+    originalStart: string
+    originalEnd: string
+    reason?: string
+  }
+}
+
+export interface ClassRescheduleOverride {
+  id: string
+  group_id?: string
+  semester: string
+  course_code: string
+  course_name: string
+  section: string
+  /** วันที่เดิมของคาบที่ถูกย้าย (YYYY-MM-DD) */
+  original_date: string
+  original_day: DayOfWeek
+  original_start: string
+  original_end: string
+  /** หากงดคลาสในวันนี้โดยไม่มีวันชดเชย */
+  canceled?: boolean
+  /** วันที่ใหม่ที่ย้ายไป (YYYY-MM-DD) */
+  new_date: string
+  new_day: DayOfWeek
+  new_start: string
+  new_end: string
+  new_room?: string
+  reason?: string
+  created_by?: string | null
+  created_at?: string
 }
 
 export interface RoutineItem {
@@ -198,12 +232,12 @@ export interface StorageAdapter {
   list<T = unknown>(prefix?: string): Promise<Array<{ key: string; value: T }>>
 }
 
-/** ?????????????????????????????????? ?????? ????????????? */
+/** นัดหมายของกลุ่มในตารางเรียน/ปฏิทิน/วันนี้ */
 export interface AppointmentItem {
   id: string
   group_id?: string
   title: string
-  /** ????????????????? YYYY-MM-DD */
+  /** วันที่นัดหมายในรูปแบบ YYYY-MM-DD */
   appt_date: string
   start_time: string
   end_time: string
@@ -213,4 +247,5 @@ export interface AppointmentItem {
   course_code: string
   created_by?: string | null
   created_at?: string
+  updated_at?: string
 }

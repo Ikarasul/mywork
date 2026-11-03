@@ -9,6 +9,8 @@ export interface AppointmentDialogProps {
   /** นัดที่เปิดดู/แก้ไข (null = สร้างนัดใหม่) */
   appointment: AppointmentItem | null
   defaultDate: string
+  defaultStartTime?: string
+  defaultEndTime?: string
   courseCodes: string[]
   canManage: boolean
   /** ผู้ใช้ลบนัดนี้ได้หรือไม่ (ฝั่งฐานข้อมูลยังบังคับ RLS อีกชั้น) */
@@ -25,6 +27,8 @@ export function AppointmentDialog({
   open,
   appointment,
   defaultDate,
+  defaultStartTime,
+  defaultEndTime,
   courseCodes,
   canManage,
   canDelete,
@@ -53,8 +57,8 @@ export function AppointmentDialog({
     setTitle(appointment?.title ?? '')
     setDate(appointment?.appt_date ?? defaultDate)
     setAllDay(appointment?.all_day ?? false)
-    setStart(appointment?.start_time ?? '09:00')
-    setEnd(appointment?.end_time ?? '10:00')
+    setStart(appointment?.start_time ?? defaultStartTime ?? '09:00')
+    setEnd(appointment?.end_time ?? defaultEndTime ?? '10:00')
     setLocation(appointment?.location ?? '')
     setNotes(appointment?.notes ?? '')
     setCourseCode(appointment?.course_code ?? '')
@@ -65,7 +69,7 @@ export function AppointmentDialog({
       window.clearTimeout(t)
       returnFocusRef.current?.focus?.()
     }
-  }, [open, appointment, defaultDate])
+  }, [open, appointment, defaultDate, defaultStartTime, defaultEndTime])
 
   // ปิดด้วยปุ่ม Esc
   useEffect(() => {

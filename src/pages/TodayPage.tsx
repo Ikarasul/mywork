@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import AppointmentDialog from '../components/AppointmentDialog'
 import PixelCat from '../components/PixelCat'
-import { Badge, Button, Card, EmptyState, Skeleton } from '../components/ui'
+import RescheduleDialog, { type RescheduleSubmitPayload } from '../components/RescheduleDialog'
+import { Badge, Button, Card, EmptyState, Skeleton, Toast } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { formatApptTimeLabel, toDateKey, useAppointments } from '../lib/appointments'
 import {
@@ -11,6 +13,7 @@ import {
   getTodayDayOfWeek,
 } from '../lib/dateThai'
 import { useGoogleCalendar } from '../lib/googleCalendar'
+import { DAY_THAI_NAMES, useClassReschedules } from '../lib/reschedules'
 import {
   DEFAULT_SEMESTER,
   KNOWN_COURSE_LINKS,
@@ -20,6 +23,7 @@ import {
   timeToMinutes,
 } from '../lib/storage'
 import type {
+  AppointmentItem,
   CourseScheduleItem,
   DayOfWeek,
   RoutineItem,
@@ -53,17 +57,29 @@ export function TodayPage() {
   const { user, displayName, activeGroup, currentRole } = useAuth()
   const gcal = useGoogleCalendar()
   const appts = useAppointments()
-  const todayAppts = appts.byDate.get(toDateKey(new Date())) ?? []
+  const reschedules = useClassReschedules(DEFAULT_SEMESTER)
+  const todayDateKey = useMemo(() => toDateKey(new Date()), [])
+  const todayAppts = appts.byDate.get(todayDateKey) ?? []
   const [sessions, setSessions] = useState<CourseScheduleItem[]>([])
   const [routines, setRoutines] = useState<RoutineItem[]>([])
   const [tasks, setTasks] = useState<TaskItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [toastMsg, setToastMsg] = useState<string | null>(null)
+  const [apptDialog, setApptDialog] = useState<{
+    open: boolean
+    item: AppointmentItem | null
+  }>({ open: false, item: null })
+  const [rescheduleTarget, setRescheduleTarget] = useState<CourseScheduleItem | null>(
+    null,
+  )
 
   const todayCode = useMemo(() => getTodayDayOfWeek(), [])
   const todayThaiDate = useMemo(() => formatFullDateThai(new Date()), [])
   const nowMinutes = useMemo(() => getCurrentMinutesOfDay(), [])
 
   const isViewer = Boolean(user && currentRole === 'viewer')
+  const canManage =
+    !user || currentRole === 'owner' || currentRole === 'admin' || currentRole === 'member'
   const groupKeyPart = activeGroup?.id ?? 'local'
   const scheduleStorageKey = `class_sessions:${groupKeyPart}:${DEFAULT_SEMESTER}`
   const taskStorageKey = activeGroup ? `tasks:${activeGroup.id}` : 'tasks'
@@ -101,11 +117,80 @@ export function TodayPage() {
     void loadTodayOverview()
   }, [loadTodayOverview])
 
-  const todayClasses = useMemo(() => {
-    return sessions
-      .filter((s) => s.day === todayCode)
-      .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start))
-  }, [sessions, todayCode])
+  const { activeSessions: todayClasses, movedAwayOrCanceled } = useMemo(
+    () => reschedules.getEffectiveSessionsForDate(sessions, todayDateKey, todayCode),
+    [reschedules, sessions, todayDateKey, todayCode],
+  )
+
+  const courseCodes = useMemo(
+    () => Array.from(new Set(sessions.map((s) => s.course_code))).sort(),
+    [sessions],
+  )
+
+  const handleRescheduleSubmit = useCallback(
+    async (payload: RescheduleSubmitPayload) => {
+      if (!rescheduleTarget) return
+      const origDay = rescheduleTarget.rescheduledInfo?.originalDay ?? rescheduleTarget.day
+      const origStart =
+        rescheduleTarget.rescheduledInfo?.originalStart ?? rescheduleTarget.start
+      const origEnd =
+        rescheduleTarget.rescheduledInfo?.originalEnd ?? rescheduleTarget.end
+      const origDate =
+        rescheduleTarget.rescheduledInfo?.originalDate ?? todayDateKey
+
+      if (payload.mode === 'permanent') {
+        const updated = sessions.map((s) => {
+          if (
+            s.course_code.toUpperCase() === rescheduleTarget.course_code.toUpperCase() &&
+            s.day === origDay &&
+            s.start === origStart
+          ) {
+            return {
+              ...s,
+              day: payload.newDay,
+              start: payload.newStart,
+              end: payload.newEnd,
+              room: payload.newRoom || s.room,
+            }
+          }
+          return s
+        })
+        await storage.set(scheduleStorageKey, updated)
+        if (rescheduleTarget.rescheduledInfo?.overrideId) {
+          await reschedules.removeOverride(rescheduleTarget.rescheduledInfo.overrideId)
+        }
+        setSessions(updated)
+        setToastMsg(
+          `เปลี่ยนตารางหลักวิชา ${rescheduleTarget.course_code} เป็นวัน${DAY_THAI_NAMES[payload.newDay]} เวลา ${payload.newStart}–${payload.newEnd} เรียบร้อยแล้ว`,
+        )
+      } else {
+        await reschedules.saveOverride(
+          {
+            course_code: rescheduleTarget.course_code,
+            course_name: rescheduleTarget.course_name,
+            section: rescheduleTarget.section,
+            original_date: origDate,
+            original_day: origDay,
+            original_start: origStart,
+            original_end: origEnd,
+            canceled: payload.mode === 'cancel',
+            new_date: payload.newDate,
+            new_start: payload.newStart,
+            new_end: payload.newEnd,
+            new_room: payload.newRoom,
+            reason: payload.reason,
+          },
+          rescheduleTarget.rescheduledInfo?.overrideId,
+        )
+        setToastMsg(
+          payload.mode === 'cancel'
+            ? `บันทึกการงดคลาสวิชา ${rescheduleTarget.course_code} วันนี้เรียบร้อยแล้ว`
+            : `ย้ายคาบวิชา ${rescheduleTarget.course_code} ไปวันที่ ${payload.newDate} (${payload.newStart}–${payload.newEnd}) เรียบร้อยแล้ว`,
+        )
+      }
+    },
+    [rescheduleTarget, todayDateKey, sessions, scheduleStorageKey, reschedules],
+  )
 
   const todayRoutines = useMemo(() => {
     return routines
@@ -171,6 +256,14 @@ export function TodayPage() {
         </div>
       </Card>
 
+      {toastMsg && (
+        <Toast
+          tone="success"
+          message={toastMsg}
+          onClose={() => setToastMsg(null)}
+        />
+      )}
+
       <div className="grid gap-6 lg:grid-cols-3">
         {/* คอลัมน์ 1: คาบเรียนวันนี้ + กิจวัตรวันนี้ */}
         <Card className="lg:col-span-1 flex flex-col justify-between">
@@ -192,7 +285,7 @@ export function TodayPage() {
                 <EmptyState
                   mood="sleep"
                   title={`วัน${DAY_NAMES[todayCode]}ไม่มีคาบเรียน!`}
-                  description="วันนี้ไม่มีตารางเรียนในระบบ พักผ่อนหรือทบทวนบทเรียนได้ตามสบายเลยเหมียว"
+                  description="วันนี้ไม่มีตารางเรียนในระบบ พักผ่อนหรือทบทวนบทเรียนได้ตามสบายเลย"
                   action={
                     <Link to="/schedule">
                       <Button variant="outline" size="sm">
@@ -213,18 +306,31 @@ export function TodayPage() {
                         className={`rounded-xl border p-3.5 transition ${
                           isOngoing
                             ? 'border-primary bg-primary-soft/60'
-                            : 'border-line bg-surface-alt'
+                            : c.rescheduledInfo
+                              ? 'border-accent-amber bg-accent-amber-soft/30'
+                              : 'border-line bg-surface-alt'
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-mono text-xs font-extrabold text-primary">
-                            {c.course_code}
-                          </span>
+                        <div className="flex flex-wrap items-center justify-between gap-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-xs font-extrabold text-primary">
+                              {c.course_code}
+                            </span>
+                            {c.rescheduledInfo && (
+                              <Badge tone="amber">🔄 ย้ายคาบ</Badge>
+                            )}
+                          </div>
                           <Badge tone={isOngoing ? 'mint' : 'neutral'}>
                             {isOngoing ? '● กำลังเรียนอยู่' : `${c.start} – ${c.end}`}
                           </Badge>
                         </div>
                         <p className="mt-1 text-sm font-bold text-ink">{c.course_name}</p>
+                        {c.rescheduledInfo && (
+                          <p className="mt-0.5 text-[11px] font-semibold text-accent-amber-fg">
+                            ย้ายมาจากวัน{DAY_NAMES[c.rescheduledInfo.originalDay]} ({c.rescheduledInfo.originalStart}–{c.rescheduledInfo.originalEnd})
+                            {c.rescheduledInfo.reason ? ` • ${c.rescheduledInfo.reason}` : ''}
+                          </p>
+                        )}
                         <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-muted">
                           <span>📍 ห้อง {c.room || '-'}</span>
                           {c.online_link && (
@@ -232,8 +338,8 @@ export function TodayPage() {
                           )}
                         </div>
 
-                        {(c.online_url || c.contact_url) && (
-                          <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-line/40 pt-2">
+                        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-line/40 pt-2">
+                          <div className="flex flex-wrap items-center gap-1.5">
                             {c.online_url && (
                               <a
                                 href={c.online_url}
@@ -241,7 +347,7 @@ export function TodayPage() {
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-accent-pink shadow-2xs hover:underline"
                               >
-                                <span>🔗 Click online classes ↗</span>
+                                <span>🔗 Meet ↗</span>
                               </a>
                             )}
                             {c.contact_url && (
@@ -251,14 +357,80 @@ export function TodayPage() {
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-status-success shadow-2xs hover:underline"
                               >
-                                <span>💬 Contact (LINE กลุ่ม) ↗</span>
+                                <span>💬 LINE ↗</span>
                               </a>
                             )}
                           </div>
-                        )}
+
+                          {canManage && (
+                            <div className="flex items-center gap-1.5">
+                              {c.rescheduledInfo && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void reschedules.removeOverride(
+                                      c.rescheduledInfo!.overrideId,
+                                    )
+                                    setToastMsg(`คืนค่าตารางเดิมของวิชา ${c.course_code} แล้ว`)
+                                  }}
+                                  className="rounded-lg border border-line bg-surface px-2 py-1 text-[11px] font-bold text-ink-secondary hover:bg-surface-hover"
+                                >
+                                  ↩️ คืนค่าเดิม
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setRescheduleTarget(c)}
+                                className="rounded-lg border border-accent-amber/50 bg-accent-amber-soft px-2.5 py-1 text-[11px] font-bold text-accent-amber-fg transition hover:opacity-90"
+                              >
+                                🔄 ย้ายคาบ/งดคลาส
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )
                   })}
+                </div>
+              )}
+
+              {/* แสดงรายการคาบเรียนของวันนี้ที่ถูกย้ายไปวันอื่นหรืองดคลาส */}
+              {movedAwayOrCanceled.length > 0 && (
+                <div className="mt-3 space-y-2 rounded-xl border border-dashed border-accent-amber bg-accent-amber-soft/25 p-3">
+                  <p className="text-xs font-bold text-accent-amber-fg">
+                    🔄 คาบเรียนปกติวันนี้ที่ถูกย้ายหรืองดคลาส ({movedAwayOrCanceled.length})
+                  </p>
+                  {movedAwayOrCanceled.map((ov) => (
+                    <div
+                      key={ov.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface px-2.5 py-2 text-xs"
+                    >
+                      <div>
+                        <span className="font-mono font-bold text-primary">
+                          {ov.course_code}
+                        </span>{' '}
+                        <span className="font-semibold text-ink">{ov.course_name}</span>
+                        <p className="text-[11px] text-ink-muted">
+                          {ov.canceled
+                            ? `⏸️ งดคลาสวันนี้ (${ov.original_start}–${ov.original_end})`
+                            : `➡️ ย้ายไปวัน${DAY_NAMES[ov.new_day]} (${ov.new_date}) เวลา ${ov.new_start}–${ov.new_end}`}
+                          {ov.reason ? ` • ${ov.reason}` : ''}
+                        </p>
+                      </div>
+                      {canManage && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void reschedules.removeOverride(ov.id)
+                            setToastMsg(`คืนค่าตารางเดิมของวิชา ${ov.course_code} แล้ว`)
+                          }}
+                          className="rounded-lg border border-line bg-surface-alt px-2 py-1 text-[11px] font-bold text-ink hover:bg-surface-hover"
+                        >
+                          ↩️ คืนค่าเดิม
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -289,21 +461,26 @@ export function TodayPage() {
                 <h3 className="text-xs font-bold text-ink-secondary uppercase">
                   🤝 นัดหมายวันนี้ ({todayAppts.length})
                 </h3>
-                <Link
-                  to="/schedule"
-                  className="inline-flex min-h-[44px] items-center text-[11px] font-bold text-primary hover:underline sm:min-h-0"
-                >
-                  + เพิ่มนัด
-                </Link>
+                {canManage && (
+                  <button
+                    type="button"
+                    onClick={() => setApptDialog({ open: true, item: null })}
+                    className="inline-flex min-h-[36px] items-center rounded-lg bg-primary-soft px-2.5 py-1 text-[11px] font-bold text-primary transition hover:bg-primary hover:text-ink-inverted"
+                  >
+                    + เพิ่มนัดวันนี้
+                  </button>
+                )}
               </div>
               {todayAppts.length === 0 ? (
                 <p className="mt-1.5 text-xs text-ink-muted">ไม่มีนัดหมายในวันนี้</p>
               ) : (
                 <div className="mt-2 space-y-2">
                   {todayAppts.map((a) => (
-                    <div
+                    <button
                       key={`today-appt-${a.id}`}
-                      className="rounded-lg border-l-4 border-accent-amber bg-accent-amber-soft/60 px-3 py-2 text-xs"
+                      type="button"
+                      onClick={() => setApptDialog({ open: true, item: a })}
+                      className="block w-full rounded-lg border-l-4 border-accent-amber bg-accent-amber-soft/60 px-3 py-2 text-left text-xs transition hover:opacity-90"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-bold text-ink">{a.title}</span>
@@ -314,7 +491,7 @@ export function TodayPage() {
                       {a.location && (
                         <p className="mt-0.5 text-ink-secondary">📍 {a.location}</p>
                       )}
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -498,6 +675,37 @@ export function TodayPage() {
           </div>
         </Card>
       </div>
+
+      {/* ป็อปอัพเพิ่ม/แก้ไขนัดหมายบนหน้าวันนี้โดยตรง */}
+      <AppointmentDialog
+        open={apptDialog.open}
+        appointment={apptDialog.item}
+        defaultDate={todayDateKey}
+        courseCodes={courseCodes}
+        canManage={appts.canManage}
+        canDelete={
+          apptDialog.item ? appts.canDeleteAppointment(apptDialog.item) : appts.canManage
+        }
+        onSave={appts.saveAppointment}
+        onDelete={appts.deleteAppointment}
+        onClose={() => setApptDialog({ open: false, item: null })}
+      />
+
+      {/* ป็อปอัพย้ายคาบเรียน/งดคลาส */}
+      <RescheduleDialog
+        open={Boolean(rescheduleTarget)}
+        session={rescheduleTarget}
+        originalDate={
+          rescheduleTarget?.rescheduledInfo?.originalDate ?? todayDateKey
+        }
+        canManage={canManage}
+        onClose={() => setRescheduleTarget(null)}
+        onSubmit={handleRescheduleSubmit}
+        onRestoreOriginal={async (overrideId) => {
+          await reschedules.removeOverride(overrideId)
+          setToastMsg('คืนค่าคาบเรียนเดิมเรียบร้อยแล้ว')
+        }}
+      />
     </div>
   )
 }

@@ -5,12 +5,14 @@ import GoogleCalendarSyncBar, {
   GoogleCalendarEventModal,
 } from '../components/GoogleCalendarSyncBar'
 import PixelCat from '../components/PixelCat'
+import RescheduleDialog, { type RescheduleSubmitPayload } from '../components/RescheduleDialog'
 import {
   Badge,
   Button,
   Card,
   EmptyState,
   Skeleton,
+  Toast,
 } from '../components/ui'
 import { formatApptTimeLabel, toDateKey, useAppointments } from '../lib/appointments'
 import { useAuth } from '../lib/auth'
@@ -20,6 +22,7 @@ import {
   getTodayDayOfWeek,
 } from '../lib/dateThai'
 import { useGoogleCalendar } from '../lib/googleCalendar'
+import { DAY_THAI_NAMES, useClassReschedules } from '../lib/reschedules'
 import {
   DEFAULT_SEMESTER,
   KNOWN_COURSE_LINKS,
@@ -89,16 +92,20 @@ function getMondayOfCurrentWeek(d: Date = new Date()): Date {
 }
 
 export function CalendarPage() {
-  const { user, activeGroup } = useAuth()
+  const { user, activeGroup, currentRole } = useAuth()
   const gcal = useGoogleCalendar()
+  const reschedules = useClassReschedules(DEFAULT_SEMESTER)
 
   const todayDateKey = useMemo(() => formatDateKey(new Date()), [])
   const todayDayCode = useMemo(() => getTodayDayOfWeek(), [])
+  const canManage =
+    !user || currentRole === 'owner' || currentRole === 'admin' || currentRole === 'member'
 
   // มุมมอง: 'week' (สัปดาห์นี้ - อ่านง่ายสุด), 'month' (รายเดือน), 'agenda' (กำหนดการ)
   const [viewMode, setViewMode] = useState<'week' | 'month' | 'agenda'>('week')
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
   const [selectedDayKey, setSelectedDayKey] = useState<string>(todayDateKey)
+  const [toastMsg, setToastMsg] = useState<string | null>(null)
 
   // ตัวกรองกิจกรรม
   const [filterClasses, setFilterClasses] = useState(true)
@@ -112,6 +119,13 @@ export function CalendarPage() {
     open: false,
     item: null,
   })
+  const [rescheduleModal, setRescheduleModal] = useState<{
+    session: CourseScheduleItem
+    originalDate: string
+    targetDate: string
+  } | null>(null)
+  const [dragOverDateKey, setDragOverDateKey] = useState<string | null>(null)
+  const [draggingEvent, setDraggingEvent] = useState<UnifiedCalendarEvent | null>(null)
 
   const [sessions, setSessions] = useState<CourseScheduleItem[]>([])
   const [routines, setRoutines] = useState<RoutineItem[]>([])
@@ -244,16 +258,22 @@ export function CalendarPage() {
     (dateKey: string, dayOfWeek: DayOfWeek): UnifiedCalendarEvent[] => {
       const events: UnifiedCalendarEvent[] = []
 
-      // 1. คาบเรียน
+      // 1. คาบเรียน (รองรับการย้ายคาบรายสัปดาห์/รายวัน)
       if (filterClasses) {
-        const classMatches = sessions.filter((s) => s.day === dayOfWeek)
+        const { activeSessions: classMatches } = reschedules.getEffectiveSessionsForDate(
+          sessions,
+          dateKey,
+          dayOfWeek,
+        )
         for (const c of classMatches) {
           events.push({
-            id: `class-${c.course_code}-${dateKey}`,
+            id: `class-${c.course_code}-${c.start}-${dateKey}`,
             title: c.course_name,
-            subtitle: c.course_code,
+            subtitle: c.rescheduledInfo
+              ? `${c.course_code} • ย้ายจากวัน${DAYS_META[c.rescheduledInfo.originalDay].label}`
+              : c.course_code,
             location: c.room ? `ห้อง ${c.room}` : undefined,
-            timeLabel: `${c.start} – ${c.end}`,
+            timeLabel: `${c.start}–${c.end}`,
             startMin: timeToMinutes(c.start),
             type: 'class',
             rawClass: c,
@@ -273,7 +293,7 @@ export function CalendarPage() {
             id: `routine-${r.id}-${dateKey}`,
             title: r.title,
             subtitle: r.category || 'กิจวัตร',
-            timeLabel: `${r.start_time} – ${r.end_time}`,
+            timeLabel: `${r.start_time}–${r.end_time}`,
             startMin: timeToMinutes(r.start_time),
             type: 'routine',
             rawRoutine: r,
@@ -353,7 +373,125 @@ export function CalendarPage() {
 
       return events.sort((a, b) => a.startMin - b.startMin)
     },
-    [filterClasses, filterRoutines, filterTasks, filterExams, filterGcal, filterAppts, appts.byDate, sessions, routines, tasks, gcal.events, gcal.overlayVisible],
+    [
+      filterClasses,
+      filterRoutines,
+      filterTasks,
+      filterExams,
+      filterGcal,
+      filterAppts,
+      appts.byDate,
+      reschedules,
+      sessions,
+      routines,
+      tasks,
+      gcal.events,
+      gcal.overlayVisible,
+    ],
+  )
+
+  const handleDropOnDate = useCallback(
+    async (targetDateKey: string) => {
+      setDragOverDateKey(null)
+      if (!draggingEvent || !canManage) {
+        setDraggingEvent(null)
+        return
+      }
+      const ev = draggingEvent
+      setDraggingEvent(null)
+      if (ev.dateKey === targetDateKey) return
+
+      if (ev.type === 'appt' && ev.rawAppt) {
+        await appts.saveAppointment(
+          {
+            title: ev.rawAppt.title,
+            appt_date: targetDateKey,
+            start_time: ev.rawAppt.start_time,
+            end_time: ev.rawAppt.end_time,
+            all_day: ev.rawAppt.all_day,
+            location: ev.rawAppt.location,
+            notes: ev.rawAppt.notes,
+            course_code: ev.rawAppt.course_code,
+          },
+          ev.rawAppt.id,
+        )
+        setToastMsg(`ย้ายนัดหมาย "${ev.rawAppt.title}" ไปวันที่ ${targetDateKey} เรียบร้อยแล้ว`)
+      } else if (ev.type === 'class' && ev.rawClass) {
+        const origDate =
+          ev.rawClass.rescheduledInfo?.originalDate ?? ev.dateKey ?? todayDateKey
+        setRescheduleModal({
+          session: ev.rawClass,
+          originalDate: origDate,
+          targetDate: targetDateKey,
+        })
+      }
+    },
+    [draggingEvent, canManage, appts, todayDateKey],
+  )
+
+  const handleRescheduleSubmit = useCallback(
+    async (payload: RescheduleSubmitPayload) => {
+      if (!rescheduleModal) return
+      const targetSess = rescheduleModal.session
+      const origDay = targetSess.rescheduledInfo?.originalDay ?? targetSess.day
+      const origStart =
+        targetSess.rescheduledInfo?.originalStart ?? targetSess.start
+      const origEnd = targetSess.rescheduledInfo?.originalEnd ?? targetSess.end
+      const origDate =
+        targetSess.rescheduledInfo?.originalDate ?? rescheduleModal.originalDate
+
+      if (payload.mode === 'permanent') {
+        const updated = sessions.map((s) => {
+          if (
+            s.course_code.toUpperCase() === targetSess.course_code.toUpperCase() &&
+            s.day === origDay &&
+            s.start === origStart
+          ) {
+            return {
+              ...s,
+              day: payload.newDay,
+              start: payload.newStart,
+              end: payload.newEnd,
+              room: payload.newRoom || s.room,
+            }
+          }
+          return s
+        })
+        await storage.set(scheduleStorageKey, updated)
+        if (targetSess.rescheduledInfo?.overrideId) {
+          await reschedules.removeOverride(targetSess.rescheduledInfo.overrideId)
+        }
+        setSessions(updated)
+        setToastMsg(
+          `เปลี่ยนตารางหลักวิชา ${targetSess.course_code} เป็นวัน${DAY_THAI_NAMES[payload.newDay]} เวลา ${payload.newStart}–${payload.newEnd} เรียบร้อยแล้ว`,
+        )
+      } else {
+        await reschedules.saveOverride(
+          {
+            course_code: targetSess.course_code,
+            course_name: targetSess.course_name,
+            section: targetSess.section,
+            original_date: origDate,
+            original_day: origDay,
+            original_start: origStart,
+            original_end: origEnd,
+            canceled: payload.mode === 'cancel',
+            new_date: payload.newDate,
+            new_start: payload.newStart,
+            new_end: payload.newEnd,
+            new_room: payload.newRoom,
+            reason: payload.reason,
+          },
+          targetSess.rescheduledInfo?.overrideId,
+        )
+        setToastMsg(
+          payload.mode === 'cancel'
+            ? `บันทึกการงดคลาสวิชา ${targetSess.course_code} วันที่ ${origDate} เรียบร้อยแล้ว`
+            : `ย้ายคาบวิชา ${targetSess.course_code} ไปวันที่ ${payload.newDate} (${payload.newStart}–${payload.newEnd}) เรียบร้อยแล้ว`,
+        )
+      }
+    },
+    [rescheduleModal, sessions, scheduleStorageKey, reschedules],
   )
 
   function handleEventClick(ev: UnifiedCalendarEvent) {
@@ -720,24 +858,72 @@ export function CalendarPage() {
         </div>
       </Card>
 
+      {toastMsg && (
+        <Toast
+          tone="success"
+          message={toastMsg}
+          onClose={() => setToastMsg(null)}
+        />
+      )}
+
       {/* เนื้อหาปฏิทินตามมุมมองที่เลือก */}
       {loading ? (
         <Skeleton lines={5} label="อีกาตัวน้อยกำลังจัดเรียงปฏิทินให้คุณ..." />
       ) : viewMode === 'week' ? (
         /* ================= 1. มุมมองรายสัปดาห์ (ดีไซน์กระดานปฏิทินแบบ Unified เชื่อมต่อ 7 วัน สะอาด สวยงาม ไม่บีบอัด) ================= */
         <Card padding="none" className="overflow-hidden border-line shadow-xs">
+          {canManage && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-alt/60 px-4 py-2 text-[11px] text-ink-secondary">
+              <span>
+                💡 <strong>ลากการ์ดวิชาเรียนหรือนัดหมาย</strong> ข้ามวันเพื่อย้ายคาบ/เลื่อนนัดได้ทันที หรือคลิกที่การ์ดเพื่อดูรายละเอียด
+              </span>
+              {reschedules.overrides.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void reschedules.clearAllOverrides()
+                    setToastMsg('คืนค่าคาบเรียนที่ย้ายชั่วคราวทั้งหมดกลับสู่ตารางปกติแล้ว')
+                  }}
+                  className="font-bold text-primary hover:underline"
+                >
+                  ↩️ คืนค่าคาบที่ย้ายทั้งหมด ({reschedules.overrides.length})
+                </button>
+              )}
+            </div>
+          )}
           <div className="overflow-x-auto">
             <div className="grid min-w-[920px] grid-cols-7 divide-x divide-line">
               {currentWeekDays.map((day) => {
                 const dayMeta = DAYS_META[day.dayOfWeek]
                 const dayEvents = getEventsForDate(day.dateKey, day.dayOfWeek)
                 const isToday = day.isToday
+                const isDropTarget = dragOverDateKey === day.dateKey
 
                 return (
                   <div
                     key={day.dateKey}
+                    onDragOver={(e) => {
+                      if (!canManage || !draggingEvent) return
+                      e.preventDefault()
+                      if (dragOverDateKey !== day.dateKey) {
+                        setDragOverDateKey(day.dateKey)
+                      }
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverDateKey === day.dateKey) {
+                        setDragOverDateKey(null)
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      void handleDropOnDate(day.dateKey)
+                    }}
                     className={`flex flex-col transition-colors ${
-                      isToday ? 'bg-primary-soft/10' : 'bg-surface'
+                      isDropTarget
+                        ? 'bg-primary-soft/30 ring-2 ring-primary ring-inset'
+                        : isToday
+                          ? 'bg-primary-soft/10'
+                          : 'bg-surface'
                     }`}
                   >
                     {/* ส่วนหัวของแต่ละวัน (Day Header) */}
@@ -786,24 +972,52 @@ export function CalendarPage() {
                       ) : (
                         dayEvents.map((ev) => {
                           const theme = getItemTheme(ev.type)
+                          const isDraggable =
+                            canManage && (ev.type === 'class' || ev.type === 'appt')
+                          const isRescheduled = Boolean(ev.rawClass?.rescheduledInfo)
+
                           return (
                             <div
                               key={ev.id}
+                              draggable={isDraggable}
+                              onDragStart={(e) => {
+                                if (!isDraggable) return
+                                e.dataTransfer.effectAllowed = 'move'
+                                e.dataTransfer.setData('text/plain', ev.id)
+                                setDraggingEvent(ev)
+                              }}
+                              onDragEnd={() => {
+                                setDraggingEvent(null)
+                                setDragOverDateKey(null)
+                              }}
                               onClick={() => {
                                 handleEventClick(ev)
                               }}
-                              className={`group cursor-pointer rounded-xl border p-2.5 text-xs transition-all hover:shadow-xs hover:border-line-strong ${theme.bg} ${theme.border}`}
+                              title={
+                                isDraggable
+                                  ? 'คลิกเพื่อดูรายละเอียด หรือลากไปวางในวันอื่นเพื่อย้ายคาบ/นัดหมาย'
+                                  : undefined
+                              }
+                              className={`group cursor-pointer rounded-xl border p-2 text-xs transition-all hover:shadow-xs hover:border-line-strong ${theme.bg} ${theme.border} ${
+                                isDraggable ? 'active:cursor-grabbing' : ''
+                              }`}
                             >
-                              {/* แถวเวลา + แท็กประเภทที่ไม่ตัดบรรทัด */}
-                              <div className="flex items-center justify-between gap-1.5">
-                                <span className="font-mono text-[11px] font-extrabold text-ink whitespace-nowrap">
+                              {/* แถวเวลา + แท็กประเภท: ใช้ flex-wrap เพื่อไม่ให้ป้าย "คาบเรียน" ถูกตัดขอบขวา */}
+                              <div className="flex flex-wrap items-center justify-between gap-1">
+                                <span className="font-mono text-[10px] font-extrabold text-ink whitespace-nowrap">
                                   {ev.timeLabel}
                                 </span>
                                 <span
-                                  className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold ${theme.chipClass}`}
+                                  className={`inline-flex max-w-full items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-bold leading-tight ${
+                                    isRescheduled
+                                      ? 'bg-accent-amber/25 text-accent-amber-fg border border-accent-amber/40'
+                                      : theme.chipClass
+                                  }`}
                                 >
-                                  <span>{theme.icon}</span>
-                                  <span className="hidden xl:inline">{theme.badgeText}</span>
+                                  <span>{isRescheduled ? '🔄' : theme.icon}</span>
+                                  <span className="truncate">
+                                    {isRescheduled ? 'ย้ายคาบ' : theme.badgeText}
+                                  </span>
                                 </span>
                               </div>
 
@@ -817,6 +1031,12 @@ export function CalendarPage() {
                                 <p className="text-xs font-bold text-ink leading-snug line-clamp-3 break-words group-hover:text-primary">
                                   {ev.title}
                                 </p>
+                                {isRescheduled && ev.rawClass?.rescheduledInfo && (
+                                  <p className="mt-0.5 text-[10px] font-semibold text-accent-amber-fg">
+                                    จากวัน{DAYS_META[ev.rawClass.rescheduledInfo.originalDay].short}{' '}
+                                    {ev.rawClass.rescheduledInfo.originalStart}
+                                  </p>
+                                )}
                               </div>
 
                               {/* สถานที่ / ห้องเรียน */}
@@ -827,32 +1047,53 @@ export function CalendarPage() {
                                 </p>
                               )}
 
-                              {/* ปุ่มลิงก์ Meet / LINE แบบ Micro Buttons ไม่เกะกะ */}
-                              {(ev.rawClass?.online_url || ev.rawClass?.contact_url) && (
-                                <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-line/40 pt-1.5">
-                                  {ev.rawClass.online_url && (
+                              {/* ปุ่มลิงก์ Meet / LINE + ปุ่มย้ายคาบแบบ Micro Buttons */}
+                              {(ev.rawClass?.online_url ||
+                                ev.rawClass?.contact_url ||
+                                (canManage && ev.rawClass)) && (
+                                <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-line/40 pt-1.5">
+                                  {ev.rawClass?.online_url && (
                                     <a
                                       href={ev.rawClass.online_url}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       onClick={(e) => e.stopPropagation()}
-                                      className="inline-flex items-center gap-1 rounded-md border border-accent-pink/30 bg-accent-pink-soft/80 px-2 py-0.5 text-[10px] font-bold text-accent-pink shadow-2xs transition hover:bg-accent-pink hover:text-ink-inverted"
+                                      className="inline-flex items-center gap-0.5 rounded-md border border-accent-pink/30 bg-accent-pink-soft/80 px-1.5 py-0.5 text-[10px] font-bold text-accent-pink shadow-2xs transition hover:bg-accent-pink hover:text-ink-inverted"
                                     >
                                       <span>🔗 Meet</span>
                                       <span>↗</span>
                                     </a>
                                   )}
-                                  {ev.rawClass.contact_url && (
+                                  {ev.rawClass?.contact_url && (
                                     <a
                                       href={ev.rawClass.contact_url}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       onClick={(e) => e.stopPropagation()}
-                                      className="inline-flex items-center gap-1 rounded-md border border-status-success/30 bg-status-success-soft/80 px-2 py-0.5 text-[10px] font-bold text-status-success shadow-2xs transition hover:bg-status-success hover:text-ink-inverted"
+                                      className="inline-flex items-center gap-0.5 rounded-md border border-status-success/30 bg-status-success-soft/80 px-1.5 py-0.5 text-[10px] font-bold text-status-success shadow-2xs transition hover:bg-status-success hover:text-ink-inverted"
                                     >
                                       <span>💬 LINE</span>
                                       <span>↗</span>
                                     </a>
+                                  )}
+                                  {canManage && ev.rawClass && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        const origDate =
+                                          ev.rawClass!.rescheduledInfo?.originalDate ??
+                                          day.dateKey
+                                        setRescheduleModal({
+                                          session: ev.rawClass!,
+                                          originalDate: origDate,
+                                          targetDate: day.dateKey,
+                                        })
+                                      }}
+                                      className="inline-flex items-center gap-0.5 rounded-md border border-accent-amber/40 bg-accent-amber-soft px-1.5 py-0.5 text-[10px] font-bold text-accent-amber-fg transition hover:opacity-90"
+                                    >
+                                      🔄 ย้ายคาบ
+                                    </button>
                                   )}
                                 </div>
                               )}
@@ -884,17 +1125,36 @@ export function CalendarPage() {
               {calendarDays.map((cell) => {
                 const isSelected = cell.dateKey === selectedDayKey
                 const dayEvents = getEventsForDate(cell.dateKey, cell.dayOfWeek)
+                const isDropTarget = dragOverDateKey === cell.dateKey
 
                 return (
                   <div
                     key={cell.dateKey}
                     onClick={() => setSelectedDayKey(cell.dateKey)}
+                    onDragOver={(e) => {
+                      if (!canManage || !draggingEvent) return
+                      e.preventDefault()
+                      if (dragOverDateKey !== cell.dateKey) {
+                        setDragOverDateKey(cell.dateKey)
+                      }
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverDateKey === cell.dateKey) {
+                        setDragOverDateKey(null)
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      void handleDropOnDate(cell.dateKey)
+                    }}
                     className={`min-h-[92px] cursor-pointer p-2 transition sm:min-h-[110px] ${
-                      !cell.isCurrentMonth
-                        ? 'bg-surface-alt/40 opacity-40'
-                        : isSelected
-                          ? 'bg-primary-soft/40 ring-2 ring-primary ring-inset'
-                          : 'bg-surface hover:bg-surface-hover/70'
+                      isDropTarget
+                        ? 'bg-primary-soft/50 ring-2 ring-primary ring-inset'
+                        : !cell.isCurrentMonth
+                          ? 'bg-surface-alt/40 opacity-40'
+                          : isSelected
+                            ? 'bg-primary-soft/40 ring-2 ring-primary ring-inset'
+                            : 'bg-surface hover:bg-surface-hover/70'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -919,12 +1179,29 @@ export function CalendarPage() {
                     <div className="mt-1.5 space-y-1">
                       {dayEvents.slice(0, 3).map((ev) => {
                         const theme = getItemTheme(ev.type)
+                        const isDraggable =
+                          canManage && (ev.type === 'class' || ev.type === 'appt')
                         return (
                           <div
                             key={ev.id}
-                            className={`truncate rounded px-1.5 py-0.5 text-[10px] font-semibold ${theme.bg} text-ink`}
+                            draggable={isDraggable}
+                            onDragStart={(e) => {
+                              if (!isDraggable) return
+                              e.stopPropagation()
+                              e.dataTransfer.effectAllowed = 'move'
+                              e.dataTransfer.setData('text/plain', ev.id)
+                              setDraggingEvent(ev)
+                            }}
+                            onDragEnd={() => {
+                              setDraggingEvent(null)
+                              setDragOverDateKey(null)
+                            }}
+                            className={`truncate rounded px-1.5 py-0.5 text-[10px] font-semibold ${theme.bg} text-ink ${
+                              isDraggable ? 'cursor-grab active:cursor-grabbing' : ''
+                            }`}
                           >
-                            <span>{theme.icon}</span> <span>{ev.title}</span>
+                            <span>{ev.rawClass?.rescheduledInfo ? '🔄' : theme.icon}</span>{' '}
+                            <span>{ev.title}</span>
                           </div>
                         )
                       })}
@@ -1159,6 +1436,30 @@ export function CalendarPage() {
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line pt-3">
+              {selectedUnifiedEvent.type === 'class' &&
+                canManage &&
+                selectedUnifiedEvent.rawClass && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      const rawClass = selectedUnifiedEvent.rawClass!
+                      const origDate =
+                        rawClass.rescheduledInfo?.originalDate ??
+                        selectedUnifiedEvent.dateKey ??
+                        todayDateKey
+                      const targetDate = selectedUnifiedEvent.dateKey ?? todayDateKey
+                      setSelectedUnifiedEvent(null)
+                      setRescheduleModal({
+                        session: rawClass,
+                        originalDate: origDate,
+                        targetDate,
+                      })
+                    }}
+                  >
+                    🔄 ย้ายคาบ / งดคลาส
+                  </Button>
+                )}
               {selectedUnifiedEvent.type === 'class' && (
                 <Link to="/schedule">
                   <Button variant="primary" size="sm">
@@ -1191,6 +1492,21 @@ export function CalendarPage() {
           </div>
         </div>
       )}
+
+      {/* ป็อปอัพย้ายคาบเรียน / งดคลาส */}
+      <RescheduleDialog
+        open={Boolean(rescheduleModal)}
+        session={rescheduleModal?.session ?? null}
+        originalDate={rescheduleModal?.originalDate ?? todayDateKey}
+        initialTargetDate={rescheduleModal?.targetDate}
+        canManage={canManage}
+        onClose={() => setRescheduleModal(null)}
+        onSubmit={handleRescheduleSubmit}
+        onRestoreOriginal={async (overrideId) => {
+          await reschedules.removeOverride(overrideId)
+          setToastMsg('คืนค่าคาบเรียนกลับสู่ตารางเดิมแล้ว')
+        }}
+      />
     </div>
   )
 }
