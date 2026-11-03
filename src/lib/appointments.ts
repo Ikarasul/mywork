@@ -65,19 +65,37 @@ export function validateAppointment(input: AppointmentInput): string | null {
 }
 
 function isMissingTableError(err: unknown): boolean {
-  const msg =
-    typeof err === 'object' && err !== null && 'message' in err
-      ? String((err as { message: unknown }).message)
-      : String(err)
-  return msg.includes('appointments') && (msg.includes('does not exist') || msg.includes('schema cache'))
+  if (!err) return false
+  const e = err as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown }
+  const text = `${String(e.message ?? err)} ${String(e.details ?? '')} ${String(e.hint ?? '')}`
+  const code = String(e.code ?? '')
+  return (
+    code === '42P01' ||
+    code === 'PGRST205' ||
+    (text.includes('appointments') &&
+      (text.includes('does not exist') ||
+        text.includes('schema cache') ||
+        text.includes('Could not find the table')))
+  )
 }
 
-const MISSING_TABLE_MESSAGE =
-  'ยังไม่พบตารางนัดหมายในฐานข้อมูล กรุณารันไฟล์ supabase/migration-appointments.sql ใน Supabase SQL Editor ก่อน'
+function getGroupLocalKey(groupId?: string | null): string {
+  return groupId ? `${LOCAL_KEY}:${groupId}` : LOCAL_KEY
+}
+
+function sortAppointments(list: AppointmentItem[]): AppointmentItem[] {
+  return [...list].sort((x, y) => {
+    if (x.appt_date !== y.appt_date) return x.appt_date.localeCompare(y.appt_date)
+    if (x.all_day !== y.all_day) return x.all_day ? -1 : 1
+    return x.start_time.localeCompare(y.start_time)
+  })
+}
 
 /**
- * ฮุกจัดการนัดหมาย: ล็อกอินและมีกลุ่ม → เก็บใน Supabase (บังคับสิทธิ์ด้วย RLS)
- * ไม่ได้ล็อกอิน → เก็บใน localStorage ของเครื่อง
+ * ฮุกจัดการนัดหมาย:
+ * - ล็อกอินและมีกลุ่ม → เก็บใน Supabase (บังคับสิทธิ์ด้วย RLS)
+ * - หากตาราง public.appointments ใน Supabase ยังไม่ได้ถูกรัน SQL จะสลับไปเก็บใน localStorage ตามกลุ่มให้อัตโนมัติทันทีโดยไม่ขึ้นข้อความ Error
+ * - ไม่ได้ล็อกอิน → เก็บใน localStorage ของเครื่อง
  */
 export function useAppointments() {
   const { user, activeGroup, currentRole } = useAuth()
@@ -86,12 +104,14 @@ export function useAppointments() {
   const [error, setError] = useState<string | null>(null)
 
   const useRemote = Boolean(supabase && user && activeGroup)
+  const localKey = getGroupLocalKey(activeGroup?.id)
   const canManage =
     !user || currentRole === 'owner' || currentRole === 'admin' || currentRole === 'member'
 
   const reload = useCallback(async () => {
     setLoading(true)
     try {
+      const localList = (await localStore.get<AppointmentItem[]>(localKey)) ?? []
       if (useRemote && supabase && activeGroup) {
         const { data, error: err } = await supabase
           .from('appointments')
@@ -99,23 +119,88 @@ export function useAppointments() {
           .eq('group_id', activeGroup.id)
           .order('appt_date', { ascending: true })
           .order('start_time', { ascending: true })
-        if (err) throw err
-        setAppointments((data ?? []) as AppointmentItem[])
+        if (err) {
+          if (isMissingTableError(err)) {
+            setAppointments(sortAppointments(localList))
+            setError(null)
+            return
+          }
+          throw err
+        }
+        const remoteList = (data ?? []) as AppointmentItem[]
+        // หากมีนัดที่เคยบันทึกไว้ในเครื่องระหว่างที่ยังไม่ได้สร้างตาราง ให้ซิงก์ขึ้นฐานข้อมูลอัตโนมัติเมื่อตารางพร้อม
+        if (localList.length > 0 && user && canManage) {
+          const remoteIds = new Set(remoteList.map((r) => r.id))
+          const pending = localList.filter((l) => !remoteIds.has(l.id))
+          if (pending.length > 0) {
+            const toInsert = pending.map((item) => ({
+              id: item.id,
+              group_id: activeGroup.id,
+              title: item.title,
+              appt_date: item.appt_date,
+              start_time: item.start_time,
+              end_time: item.end_time,
+              all_day: item.all_day,
+              location: item.location,
+              notes: item.notes,
+              course_code: item.course_code,
+              created_by: user.id,
+            }))
+            const { error: syncErr } = await supabase.from('appointments').insert(toInsert)
+            if (!syncErr) {
+              await localStore.set(localKey, [])
+              const merged = sortAppointments([...remoteList, ...pending])
+              setAppointments(merged)
+              setError(null)
+              return
+            }
+          }
+        }
+        setAppointments(sortAppointments(remoteList))
       } else {
-        setAppointments((await localStore.get<AppointmentItem[]>(LOCAL_KEY)) ?? [])
+        setAppointments(sortAppointments(localList))
       }
       setError(null)
     } catch (err) {
-      setAppointments([])
-      setError(isMissingTableError(err) ? MISSING_TABLE_MESSAGE : formatSupabaseErrorThai(err))
+      if (isMissingTableError(err)) {
+        const fallback = (await localStore.get<AppointmentItem[]>(localKey)) ?? []
+        setAppointments(sortAppointments(fallback))
+        setError(null)
+      } else {
+        setAppointments([])
+        setError(formatSupabaseErrorThai(err))
+      }
     } finally {
       setLoading(false)
     }
-  }, [useRemote, activeGroup])
+  }, [useRemote, activeGroup, localKey, user, canManage])
 
   useEffect(() => {
     void reload()
   }, [reload])
+
+  const saveLocalFallback = useCallback(
+    async (
+      row: Omit<AppointmentItem, 'id' | 'created_at' | 'updated_at'>,
+      id?: string,
+    ) => {
+      const list = (await localStore.get<AppointmentItem[]>(localKey)) ?? []
+      const nowIso = new Date().toISOString()
+      const next = id
+        ? list.map((a) => (a.id === id ? { ...a, ...row, updated_at: nowIso } : a))
+        : [
+            ...list,
+            {
+              id: window.crypto.randomUUID(),
+              ...row,
+              created_at: nowIso,
+              updated_at: nowIso,
+            },
+          ]
+      await localStore.set(localKey, next)
+    },
+    [localKey],
+  )
 
   const saveAppointment = useCallback(
     async (input: AppointmentInput, id?: string) => {
@@ -142,33 +227,97 @@ export function useAppointments() {
               .update(row)
               .eq('id', id)
               .select('id')
-            if (err) throw err
+            if (err) {
+              if (isMissingTableError(err)) {
+                await saveLocalFallback(
+                  { ...row, group_id: activeGroup.id, created_by: user.id },
+                  id,
+                )
+                await reload()
+                return
+              }
+              throw err
+            }
             if (!data || data.length === 0) {
+              // หากเป็นรายการที่อยู่ใน local fallback ให้แก้ไขใน localStore ได้
+              const localList = (await localStore.get<AppointmentItem[]>(localKey)) ?? []
+              if (localList.some((a) => a.id === id)) {
+                await saveLocalFallback(
+                  { ...row, group_id: activeGroup.id, created_by: user.id },
+                  id,
+                )
+                await reload()
+                return
+              }
               throw new Error('คุณไม่มีสิทธิ์แก้ไขนัดนี้ (ถูกปฏิเสธโดย RLS)')
             }
           } else {
             const { error: err } = await supabase
               .from('appointments')
               .insert({ ...row, group_id: activeGroup.id, created_by: user.id })
-            if (err) throw err
+            if (err) {
+              if (isMissingTableError(err)) {
+                await saveLocalFallback({
+                  ...row,
+                  group_id: activeGroup.id,
+                  created_by: user.id,
+                })
+                await reload()
+                return
+              }
+              throw err
+            }
           }
         } else {
-          const list = (await localStore.get<AppointmentItem[]>(LOCAL_KEY)) ?? []
-          const next = id
-            ? list.map((a) => (a.id === id ? { ...a, ...row } : a))
-            : [...list, { id: window.crypto.randomUUID(), ...row, created_at: new Date().toISOString() }]
-          await localStore.set(LOCAL_KEY, next)
+          await saveLocalFallback(
+            {
+              ...row,
+              group_id: activeGroup?.id,
+              created_by: user?.id ?? null,
+            },
+            id,
+          )
         }
       } catch (err) {
-        throw new Error(isMissingTableError(err) ? MISSING_TABLE_MESSAGE : formatSupabaseErrorThai(err))
+        if (isMissingTableError(err)) {
+          await saveLocalFallback(
+            {
+              ...row,
+              group_id: activeGroup?.id,
+              created_by: user?.id ?? null,
+            },
+            id,
+          )
+        } else {
+          throw new Error(formatSupabaseErrorThai(err))
+        }
       }
       await reload()
     },
-    [canManage, useRemote, activeGroup, user, reload],
+    [canManage, useRemote, activeGroup, user, localKey, saveLocalFallback, reload],
   )
 
   const deleteAppointment = useCallback(
     async (id: string) => {
+      const target = appointments.find((a) => a.id === id)
+      if (target && user) {
+        const allowed =
+          currentRole === 'owner' ||
+          currentRole === 'admin' ||
+          (currentRole === 'member' && (!target.created_by || target.created_by === user.id))
+        if (!allowed) {
+          throw new Error('คุณไม่มีสิทธิ์ลบนัดนี้ (สมาชิกลบได้เฉพาะนัดที่ตนเองสร้าง)')
+        }
+      }
+
+      const removeFromLocal = async () => {
+        const list = (await localStore.get<AppointmentItem[]>(localKey)) ?? []
+        await localStore.set(
+          localKey,
+          list.filter((a) => a.id !== id),
+        )
+      }
+
       try {
         if (useRemote && supabase) {
           const { data, error: err } = await supabase
@@ -176,23 +325,36 @@ export function useAppointments() {
             .delete()
             .eq('id', id)
             .select('id')
-          if (err) throw err
+          if (err) {
+            if (isMissingTableError(err)) {
+              await removeFromLocal()
+              await reload()
+              return
+            }
+            throw err
+          }
           if (!data || data.length === 0) {
+            const localList = (await localStore.get<AppointmentItem[]>(localKey)) ?? []
+            if (localList.some((a) => a.id === id)) {
+              await removeFromLocal()
+              await reload()
+              return
+            }
             throw new Error('คุณไม่มีสิทธิ์ลบนัดนี้ (สมาชิกลบได้เฉพาะนัดที่ตนเองสร้าง)')
           }
         } else {
-          const list = (await localStore.get<AppointmentItem[]>(LOCAL_KEY)) ?? []
-          await localStore.set(
-            LOCAL_KEY,
-            list.filter((a) => a.id !== id),
-          )
+          await removeFromLocal()
         }
       } catch (err) {
-        throw new Error(formatSupabaseErrorThai(err))
+        if (isMissingTableError(err)) {
+          await removeFromLocal()
+        } else {
+          throw new Error(formatSupabaseErrorThai(err))
+        }
       }
       await reload()
     },
-    [useRemote, reload],
+    [appointments, user, currentRole, useRemote, localKey, reload],
   )
 
   const byDate = useMemo(() => {

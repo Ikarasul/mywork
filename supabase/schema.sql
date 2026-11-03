@@ -133,6 +133,26 @@ CREATE TABLE IF NOT EXISTS public.share_links (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- 1.11 ตารางนัดหมายของกลุ่ม (appointments)
+CREATE TABLE IF NOT EXISTS public.appointments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  group_id uuid NOT NULL REFERENCES public.groups(id) ON DELETE CASCADE,
+  title text NOT NULL CHECK (char_length(title) BETWEEN 1 AND 200),
+  appt_date date NOT NULL,
+  start_time text NOT NULL DEFAULT '09:00' CHECK (start_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'),
+  end_time text NOT NULL DEFAULT '10:00' CHECK (end_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'),
+  all_day boolean NOT NULL DEFAULT false,
+  location text NOT NULL DEFAULT '' CHECK (char_length(location) <= 300),
+  notes text NOT NULL DEFAULT '' CHECK (char_length(notes) <= 2000),
+  course_code text NOT NULL DEFAULT '',
+  created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_appointments_group_date
+  ON public.appointments (group_id, appt_date);
+
 -- ============================================================================
 -- 2. ฟังก์ชันช่วยเหลือและ Triggers สำหรับจัดการสิทธิ์และความถูกต้องของข้อมูล
 -- ============================================================================
@@ -266,6 +286,22 @@ CREATE TRIGGER trg_enforce_task_update
   BEFORE UPDATE ON public.tasks
   FOR EACH ROW EXECUTE FUNCTION public.enforce_task_update_permissions();
 
+-- อัปเดต updated_at อัตโนมัติสำหรับตาราง appointments
+CREATE OR REPLACE FUNCTION public.touch_appointments_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_touch_appointments ON public.appointments;
+CREATE TRIGGER trg_touch_appointments
+  BEFORE UPDATE ON public.appointments
+  FOR EACH ROW EXECUTE FUNCTION public.touch_appointments_updated_at();
+
 -- ============================================================================
 -- 3. เปิดใช้งาน Row Level Security (RLS) ทุกตาราง และจำกัดสิทธิ์ผู้ใช้ anon
 -- ============================================================================
@@ -280,6 +316,7 @@ ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.routine_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.share_links ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.appointments ENABLE ROW LEVEL SECURITY;
 
 -- ห้ามผู้ใช้ที่ไม่ได้ล็อกอิน (anon) อ่านหรือเขียนทุกตารางโดยตรง (ต้องเรียก RPC get_shared_view เท่านั้น)
 REVOKE ALL ON public.profiles FROM anon;
@@ -292,6 +329,7 @@ REVOKE ALL ON public.tasks FROM anon;
 REVOKE ALL ON public.messages FROM anon;
 REVOKE ALL ON public.routine_items FROM anon;
 REVOKE ALL ON public.share_links FROM anon;
+REVOKE ALL ON public.appointments FROM anon;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.profiles TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.groups TO authenticated;
@@ -303,6 +341,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.tasks TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.messages TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.routine_items TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.share_links TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.appointments TO authenticated;
 
 -- ============================================================================
 -- 4. นโยบายความปลอดภัย (RLS Policies) พร้อมคำอธิบายภาษาไทยทุกนโยบาย
@@ -642,6 +681,46 @@ CREATE POLICY "share_links_delete_owner_admin"
   TO authenticated
   USING (public.get_my_group_role(group_id) IN ('owner', 'admin'));
 
+-- ----------------------------------------------------------------------------
+-- 4.11 ตาราง appointments (นัดหมายของกลุ่ม)
+-- ----------------------------------------------------------------------------
+-- นโยบาย: ผู้ใช้ที่ล็อกอิน (รวมผู้ชม) อ่านนัดหมายได้ เช่นเดียวกับตารางเรียน
+DROP POLICY IF EXISTS "appointments_select_authenticated" ON public.appointments;
+CREATE POLICY "appointments_select_authenticated"
+  ON public.appointments FOR SELECT
+  TO authenticated
+  USING (true);
+
+-- นโยบาย: เพิ่ม/แก้ไขนัดหมายได้เฉพาะ owner, admin, member เท่านั้น
+DROP POLICY IF EXISTS "appointments_insert_group_members" ON public.appointments;
+CREATE POLICY "appointments_insert_group_members"
+  ON public.appointments FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    public.get_my_group_role(group_id) IN ('owner', 'admin', 'member')
+    AND created_by = auth.uid()
+  );
+
+DROP POLICY IF EXISTS "appointments_update_group_members" ON public.appointments;
+CREATE POLICY "appointments_update_group_members"
+  ON public.appointments FOR UPDATE
+  TO authenticated
+  USING (public.get_my_group_role(group_id) IN ('owner', 'admin', 'member'))
+  WITH CHECK (public.get_my_group_role(group_id) IN ('owner', 'admin', 'member'));
+
+-- นโยบาย: ลบนัดหมาย owner/admin ลบได้ทุกนัด ส่วน member ลบได้เฉพาะนัดที่ตนเองสร้าง
+DROP POLICY IF EXISTS "appointments_delete_role_based" ON public.appointments;
+CREATE POLICY "appointments_delete_role_based"
+  ON public.appointments FOR DELETE
+  TO authenticated
+  USING (
+    public.get_my_group_role(group_id) IN ('owner', 'admin')
+    OR (
+      public.get_my_group_role(group_id) = 'member'
+      AND created_by = auth.uid()
+    )
+  );
+
 -- ============================================================================
 -- 5. ฟังก์ชัน RPC แบบ SECURITY DEFINER
 -- ============================================================================
@@ -878,5 +957,15 @@ BEGIN
       AND tablename = 'tasks'
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.tasks;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'appointments'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.appointments;
   END IF;
 END $$;
