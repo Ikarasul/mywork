@@ -7,6 +7,16 @@ import {
 } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import CourseDialog from '../components/CourseDialog'
+import {
+  IconBookOpen,
+  IconCheck,
+  IconEye,
+  IconFileText,
+  IconHourglass,
+  IconMapPin,
+  IconTarget,
+  IconZap,
+} from '../components/icons'
 import { Badge, Card, EmptyState, Skeleton } from '../components/ui'
 import { formatSupabaseErrorThai } from '../lib/auth'
 import { formatDateTimeThai } from '../lib/dateThai'
@@ -35,19 +45,40 @@ const DAY_NAMES: Record<DayOfWeek, string> = {
   SUN: 'อาทิตย์',
 }
 
-const TASK_TYPE_LABELS: Record<TaskType, string> = {
-  homework: '📘 การบ้าน',
-  work: '🛠️ งานกลุ่ม/โปรเจกต์',
-  exam: '🎯 สอบ',
+const TASK_TYPE_LABELS: Record<TaskType, { icon: (cls?: string) => React.ReactNode; label: string }> = {
+  homework: {
+    icon: (cls = 'h-3.5 w-3.5 shrink-0') => <IconFileText className={cls} />,
+    label: 'การบ้าน',
+  },
+  work: {
+    icon: (cls = 'h-3.5 w-3.5 shrink-0') => <IconBookOpen className={cls} />,
+    label: 'งานกลุ่ม/โปรเจกต์',
+  },
+  exam: {
+    icon: (cls = 'h-3.5 w-3.5 shrink-0') => <IconTarget className={cls} />,
+    label: 'สอบ',
+  },
 }
 
 const STATUS_META: Record<
   TaskStatus,
-  { icon: string; label: string; tone: 'warning' | 'sky' | 'success' }
+  { icon: (cls?: string) => React.ReactNode; label: string; tone: 'warning' | 'sky' | 'success' }
 > = {
-  todo: { icon: '⏳', label: 'รอดำเนินการ', tone: 'warning' },
-  in_progress: { icon: '⚡', label: 'กำลังทำ', tone: 'sky' },
-  done: { icon: '✓', label: 'เสร็จแล้ว', tone: 'success' },
+  todo: {
+    icon: (cls = 'h-3 w-3 shrink-0') => <IconHourglass className={cls} />,
+    label: 'รอดำเนินการ',
+    tone: 'warning',
+  },
+  in_progress: {
+    icon: (cls = 'h-3 w-3 shrink-0') => <IconZap className={cls} />,
+    label: 'กำลังทำ',
+    tone: 'sky',
+  },
+  done: {
+    icon: (cls = 'h-3 w-3 shrink-0') => <IconCheck className={cls} />,
+    label: 'เสร็จแล้ว',
+    tone: 'success',
+  },
 }
 
 export function SharedViewPage() {
@@ -234,7 +265,10 @@ export function SharedViewPage() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone="primary">ลิงก์แชร์สาธารณะ</Badge>
-              <Badge tone="warning">👁️ โหมดดูอย่างเดียว</Badge>
+              <Badge tone="warning" className="inline-flex items-center gap-1">
+                <IconEye className="h-3 w-3 shrink-0" />
+                <span>โหมดดูอย่างเดียว</span>
+              </Badge>
             </div>
             <h1 className="mt-2 text-2xl font-bold text-ink">
               กลุ่ม: {payload.group?.name}
@@ -339,8 +373,15 @@ export function SharedViewPage() {
                 >
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone="primary">
-                        {TASK_TYPE_LABELS[t.task_type] ?? t.task_type}
+                      <Badge tone="primary" className="inline-flex items-center gap-1">
+                        {TASK_TYPE_LABELS[t.task_type]
+                          ? (
+                              <>
+                                {TASK_TYPE_LABELS[t.task_type].icon('h-3.5 w-3.5 shrink-0')}
+                                <span>{TASK_TYPE_LABELS[t.task_type].label}</span>
+                              </>
+                            )
+                          : t.task_type}
                       </Badge>
                       {t.course_code && (
                         <span className="rounded border border-line bg-surface px-2 py-0.5 font-mono text-xs font-semibold text-primary">
@@ -354,8 +395,18 @@ export function SharedViewPage() {
                     )}
                     {t.task_type === 'exam' && (t.exam_room || t.exam_topics) && (
                       <div className="mt-1 flex flex-wrap gap-3 text-xs text-ink-secondary">
-                        {t.exam_room && <span>📍 ห้องสอบ: {t.exam_room}</span>}
-                        {t.exam_topics && <span>📖 หัวข้อสอบ: {t.exam_topics}</span>}
+                        {t.exam_room && (
+                          <span className="flex items-center gap-1">
+                            <IconMapPin className="h-3 w-3 shrink-0 text-accent-pink" />
+                            <span>ห้องสอบ: {t.exam_room}</span>
+                          </span>
+                        )}
+                        {t.exam_topics && (
+                          <span className="flex items-center gap-1">
+                            <IconBookOpen className="h-3 w-3 shrink-0 text-accent-pink" />
+                            <span>หัวข้อสอบ: {t.exam_topics}</span>
+                          </span>
+                        )}
                       </div>
                     )}
                     <div className="mt-1 flex flex-wrap gap-3 text-xs text-ink-muted">
@@ -368,8 +419,8 @@ export function SharedViewPage() {
                     </div>
                   </div>
 
-                  <Badge tone={st.tone}>
-                    <span>{st.icon}</span>
+                  <Badge tone={st.tone} className="inline-flex items-center gap-1">
+                    {st.icon('h-3 w-3 shrink-0')}
                     <span>{st.label}</span>
                   </Badge>
                 </div>

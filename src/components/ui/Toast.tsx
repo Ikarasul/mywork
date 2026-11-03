@@ -1,3 +1,5 @@
+import { IconX } from '../icons'
+
 export type ToastTone = 'success' | 'warning' | 'danger' | 'info'
 
 export interface ToastProps {
@@ -30,9 +32,9 @@ export function Toast({ message, tone = 'info', onClose }: ToastProps) {
           type="button"
           onClick={onClose}
           aria-label="ปิดข้อความแจ้งเตือน"
-          className="min-h-[32px] min-w-[32px] shrink-0 rounded-lg px-2 text-xs font-bold hover:opacity-75"
+          className="flex min-h-[32px] min-w-[32px] shrink-0 items-center justify-center rounded-lg hover:opacity-75"
         >
-          ✕
+          <IconX className="h-3.5 w-3.5" />
         </button>
       )}
     </div>

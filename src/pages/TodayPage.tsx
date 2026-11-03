@@ -1,6 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AppointmentDialog from '../components/AppointmentDialog'
+import {
+  IconBookOpen,
+  IconCalendar,
+  IconCheck,
+  IconClock,
+  IconExternalLink,
+  IconEye,
+  IconFileText,
+  IconHandshake,
+  IconHourglass,
+  IconMapPin,
+  IconMessageCircle,
+  IconPauseCircle,
+  IconPlus,
+  IconRefreshCw,
+  IconRotateCcw,
+  IconTarget,
+  IconVideo,
+  IconZap,
+} from '../components/icons'
 import PixelCat from '../components/PixelCat'
 import RescheduleDialog, { type RescheduleSubmitPayload } from '../components/RescheduleDialog'
 import { Badge, Button, Card, EmptyState, Skeleton, Toast } from '../components/ui'
@@ -44,12 +64,24 @@ const DAY_NAMES: Record<DayOfWeek, string> = {
 function getStatusMeta(status: TaskStatus) {
   switch (status) {
     case 'done':
-      return { icon: '✓', label: 'เสร็จแล้ว', tone: 'success' as const }
+      return {
+        icon: <IconCheck className="h-3 w-3 shrink-0" />,
+        label: 'เสร็จแล้ว',
+        tone: 'success' as const,
+      }
     case 'in_progress':
-      return { icon: '⚡', label: 'กำลังทำ', tone: 'sky' as const }
+      return {
+        icon: <IconZap className="h-3 w-3 shrink-0" />,
+        label: 'กำลังทำ',
+        tone: 'sky' as const,
+      }
     case 'todo':
     default:
-      return { icon: '⏳', label: 'รอดำเนินการ', tone: 'warning' as const }
+      return {
+        icon: <IconHourglass className="h-3 w-3 shrink-0" />,
+        label: 'รอดำเนินการ',
+        tone: 'warning' as const,
+      }
   }
 }
 
@@ -228,7 +260,12 @@ export function TodayPage() {
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone="primary">หน้าแรก • วันนี้</Badge>
               <Badge tone="pink">วัน{DAY_NAMES[todayCode]}</Badge>
-              {isViewer && <Badge tone="warning">👁️ โหมดดูอย่างเดียว</Badge>}
+              {isViewer && (
+                <Badge tone="warning" className="inline-flex items-center gap-1">
+                  <IconEye className="h-3 w-3 shrink-0" />
+                  <span>โหมดดูอย่างเดียว</span>
+                </Badge>
+              )}
             </div>
             <h1 className="text-xl font-bold text-ink sm:text-2xl">
               สวัสดี {user ? displayName : 'นักศึกษา'}! สรุปตารางวันนี้ของคุณ
@@ -270,8 +307,9 @@ export function TodayPage() {
           <div>
             <div className="flex items-center justify-between gap-2 border-b border-line pb-3">
               <div>
-                <h2 className="text-base font-bold text-ink">
-                  📚 คาบเรียนวันนี้ (วัน{DAY_NAMES[todayCode]})
+                <h2 className="flex items-center gap-2 text-base font-bold text-ink">
+                  <IconBookOpen className="h-4 w-4 text-primary shrink-0" />
+                  <span>คาบเรียนวันนี้ (วัน{DAY_NAMES[todayCode]})</span>
                 </h2>
                 <p className="text-xs text-ink-muted">
                   รายวิชาที่มีเรียนในวัน{DAY_NAMES[todayCode]}นี้
@@ -317,7 +355,10 @@ export function TodayPage() {
                               {c.course_code}
                             </span>
                             {c.rescheduledInfo && (
-                              <Badge tone="amber">🔄 ย้ายคาบ</Badge>
+                              <Badge tone="amber" className="inline-flex items-center gap-1">
+                                <IconRefreshCw className="h-3 w-3 shrink-0" />
+                                <span>ย้ายคาบ</span>
+                              </Badge>
                             )}
                           </div>
                           <Badge tone={isOngoing ? 'mint' : 'neutral'}>
@@ -332,7 +373,10 @@ export function TodayPage() {
                           </p>
                         )}
                         <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-muted">
-                          <span>📍 ห้อง {c.room || '-'}</span>
+                          <span className="inline-flex items-center gap-1">
+                            <IconMapPin className="h-3 w-3 shrink-0" />
+                            <span>ห้อง {c.room || '-'}</span>
+                          </span>
                           {c.online_link && (
                             <Badge tone="mint">มีเรียนออนไลน์</Badge>
                           )}
@@ -345,9 +389,11 @@ export function TodayPage() {
                                 href={c.online_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-accent-pink shadow-2xs hover:underline"
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-accent-pink shadow-2xs hover:underline"
                               >
-                                <span>🔗 Meet ↗</span>
+                                <IconVideo className="h-3.5 w-3.5 shrink-0" />
+                                <span>Meet</span>
+                                <IconExternalLink className="h-2.5 w-2.5 opacity-70" />
                               </a>
                             )}
                             {c.contact_url && (
@@ -355,9 +401,11 @@ export function TodayPage() {
                                 href={c.contact_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-status-success shadow-2xs hover:underline"
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-status-success shadow-2xs hover:underline"
                               >
-                                <span>💬 LINE ↗</span>
+                                <IconMessageCircle className="h-3.5 w-3.5 shrink-0" />
+                                <span>LINE</span>
+                                <IconExternalLink className="h-2.5 w-2.5 opacity-70" />
                               </a>
                             )}
                           </div>
@@ -373,17 +421,19 @@ export function TodayPage() {
                                     )
                                     setToastMsg(`คืนค่าตารางเดิมของวิชา ${c.course_code} แล้ว`)
                                   }}
-                                  className="rounded-lg border border-line bg-surface px-2 py-1 text-[11px] font-bold text-ink-secondary hover:bg-surface-hover"
+                                  className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-2 py-1 text-[11px] font-bold text-ink-secondary hover:bg-surface-hover"
                                 >
-                                  ↩️ คืนค่าเดิม
+                                  <IconRotateCcw className="h-3 w-3 shrink-0" />
+                                  <span>คืนค่าเดิม</span>
                                 </button>
                               )}
                               <button
                                 type="button"
                                 onClick={() => setRescheduleTarget(c)}
-                                className="rounded-lg border border-accent-amber/50 bg-accent-amber-soft px-2.5 py-1 text-[11px] font-bold text-accent-amber-fg transition hover:opacity-90"
+                                className="inline-flex items-center gap-1 rounded-lg border border-accent-amber/50 bg-accent-amber-soft px-2.5 py-1 text-[11px] font-bold text-accent-amber-fg transition hover:opacity-90"
                               >
-                                🔄 ย้ายคาบ/งดคลาส
+                                <IconRefreshCw className="h-3 w-3 shrink-0" />
+                                <span>ย้ายคาบ/งดคลาส</span>
                               </button>
                             </div>
                           )}
@@ -397,8 +447,9 @@ export function TodayPage() {
               {/* แสดงรายการคาบเรียนของวันนี้ที่ถูกย้ายไปวันอื่นหรืองดคลาส */}
               {movedAwayOrCanceled.length > 0 && (
                 <div className="mt-3 space-y-2 rounded-xl border border-dashed border-accent-amber bg-accent-amber-soft/25 p-3">
-                  <p className="text-xs font-bold text-accent-amber-fg">
-                    🔄 คาบเรียนปกติวันนี้ที่ถูกย้ายหรืองดคลาส ({movedAwayOrCanceled.length})
+                  <p className="flex items-center gap-1.5 text-xs font-bold text-accent-amber-fg">
+                    <IconRefreshCw className="h-3.5 w-3.5 shrink-0" />
+                    <span>คาบเรียนปกติวันนี้ที่ถูกย้ายหรืองดคลาส ({movedAwayOrCanceled.length})</span>
                   </p>
                   {movedAwayOrCanceled.map((ov) => (
                     <div
@@ -410,12 +461,19 @@ export function TodayPage() {
                           {ov.course_code}
                         </span>{' '}
                         <span className="font-semibold text-ink">{ov.course_name}</span>
-                        <p className="text-[11px] text-ink-muted">
-                          {ov.canceled
-                            ? `⏸️ งดคลาสวันนี้ (${ov.original_start}–${ov.original_end})`
-                            : `➡️ ย้ายไปวัน${DAY_NAMES[ov.new_day]} (${ov.new_date}) เวลา ${ov.new_start}–${ov.new_end}`}
+                        <div className="flex items-center gap-1 text-[11px] text-ink-muted">
+                          {ov.canceled ? (
+                            <span className="inline-flex items-center gap-1 text-accent-pink">
+                              <IconPauseCircle className="h-3 w-3 shrink-0" />
+                              <span>งดคลาสวันนี้ ({ov.original_start}–{ov.original_end})</span>
+                            </span>
+                          ) : (
+                            <span>
+                              ย้ายไปวัน{DAY_NAMES[ov.new_day]} ({ov.new_date}) เวลา {ov.new_start}–{ov.new_end}
+                            </span>
+                          )}
                           {ov.reason ? ` • ${ov.reason}` : ''}
-                        </p>
+                        </div>
                       </div>
                       {canManage && (
                         <button
@@ -424,9 +482,10 @@ export function TodayPage() {
                             void reschedules.removeOverride(ov.id)
                             setToastMsg(`คืนค่าตารางเดิมของวิชา ${ov.course_code} แล้ว`)
                           }}
-                          className="rounded-lg border border-line bg-surface-alt px-2 py-1 text-[11px] font-bold text-ink hover:bg-surface-hover"
+                          className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface-alt px-2 py-1 text-[11px] font-bold text-ink hover:bg-surface-hover"
                         >
-                          ↩️ คืนค่าเดิม
+                          <IconRotateCcw className="h-3 w-3 shrink-0" />
+                          <span>คืนค่าเดิม</span>
                         </button>
                       )}
                     </div>
@@ -437,8 +496,9 @@ export function TodayPage() {
 
             {todayRoutines.length > 0 && (
               <div className="mt-5 border-t border-line pt-4">
-                <h3 className="text-xs font-bold text-ink-secondary uppercase">
-                  ⏰ ตารางชีวิตวันนี้ ({todayRoutines.length})
+                <h3 className="flex items-center gap-1.5 text-xs font-bold text-ink-secondary uppercase">
+                  <IconClock className="h-3.5 w-3.5 text-accent-mint-fg shrink-0" />
+                  <span>ตารางชีวิตวันนี้ ({todayRoutines.length})</span>
                 </h3>
                 <div className="mt-2 space-y-2">
                   {todayRoutines.slice(0, 3).map((r) => (
@@ -458,16 +518,18 @@ export function TodayPage() {
 
             <div className="mt-5 border-t border-line pt-4">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="text-xs font-bold text-ink-secondary uppercase">
-                  🤝 นัดหมายวันนี้ ({todayAppts.length})
+                <h3 className="flex items-center gap-1.5 text-xs font-bold text-ink-secondary uppercase">
+                  <IconHandshake className="h-3.5 w-3.5 text-accent-amber-fg shrink-0" />
+                  <span>นัดหมายวันนี้ ({todayAppts.length})</span>
                 </h3>
                 {canManage && (
                   <button
                     type="button"
                     onClick={() => setApptDialog({ open: true, item: null })}
-                    className="inline-flex min-h-[36px] items-center rounded-lg bg-primary-soft px-2.5 py-1 text-[11px] font-bold text-primary transition hover:bg-primary hover:text-ink-inverted"
+                    className="inline-flex min-h-[36px] items-center gap-1 rounded-lg bg-primary-soft px-2.5 py-1 text-[11px] font-bold text-primary transition hover:bg-primary hover:text-ink-inverted"
                   >
-                    + เพิ่มนัดวันนี้
+                    <IconPlus className="h-3 w-3 shrink-0" />
+                    <span>เพิ่มนัดวันนี้</span>
                   </button>
                 )}
               </div>
@@ -489,7 +551,10 @@ export function TodayPage() {
                         </span>
                       </div>
                       {a.location && (
-                        <p className="mt-0.5 text-ink-secondary">📍 {a.location}</p>
+                        <p className="mt-0.5 flex items-center gap-1 text-ink-secondary">
+                          <IconMapPin className="h-3 w-3 shrink-0" />
+                          <span>{a.location}</span>
+                        </p>
                       )}
                     </button>
                   ))}
@@ -499,8 +564,9 @@ export function TodayPage() {
 
             <div className="mt-5 border-t border-line pt-4">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="text-xs font-bold text-ink-secondary uppercase">
-                  📆 Google Calendar วันนี้ ({todayGcalEvents.length})
+                <h3 className="flex items-center gap-1.5 text-xs font-bold text-ink-secondary uppercase">
+                  <IconCalendar className="h-3.5 w-3.5 text-accent-sky-fg shrink-0" />
+                  <span>Google Calendar วันนี้ ({todayGcalEvents.length})</span>
                 </h3>
                 <button
                   type="button"
@@ -508,7 +574,14 @@ export function TodayPage() {
                   onClick={() => void gcal.syncNow()}
                   className="text-[11px] font-bold text-primary hover:underline disabled:opacity-50"
                 >
-                  {gcal.syncing ? 'กำลังซิงก์...' : '🔄 ซิงก์ตอนนี้'}
+                  {gcal.syncing ? (
+                    'กำลังซิงก์...'
+                  ) : (
+                    <span className="inline-flex items-center gap-1">
+                      <IconRefreshCw className="h-3 w-3 shrink-0" />
+                      <span>ซิงก์ตอนนี้</span>
+                    </span>
+                  )}
                 </button>
               </div>
               {todayGcalEvents.length === 0 ? (
@@ -557,7 +630,10 @@ export function TodayPage() {
           <div>
             <div className="flex items-center justify-between gap-2 border-b border-line pb-3">
               <div>
-                <h2 className="text-base font-bold text-ink">📝 งาน/การบ้านใกล้ส่ง</h2>
+                <h2 className="flex items-center gap-2 text-base font-bold text-ink">
+                  <IconFileText className="h-4 w-4 text-accent-amber-fg shrink-0" />
+                  <span>งาน/การบ้านใกล้ส่ง</span>
+                </h2>
                 <p className="text-xs text-ink-muted">รายการงานที่ยังรอดำเนินการหรือกำลังทำ</p>
               </div>
               <Badge tone="amber">{upcomingAssignments.length} งาน</Badge>
@@ -587,8 +663,8 @@ export function TodayPage() {
                         className="rounded-xl border border-line bg-surface-alt p-3.5"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-1.5">
-                          <Badge tone={st.tone}>
-                            <span>{st.icon}</span>
+                          <Badge tone={st.tone} className="inline-flex items-center gap-1">
+                            {st.icon}
                             <span>{st.label}</span>
                           </Badge>
                           {t.course_code && (
@@ -621,7 +697,10 @@ export function TodayPage() {
           <div>
             <div className="flex items-center justify-between gap-2 border-b border-line pb-3">
               <div>
-                <h2 className="text-base font-bold text-ink">🎯 สอบใกล้ถึง</h2>
+                <h2 className="flex items-center gap-2 text-base font-bold text-ink">
+                  <IconTarget className="h-4 w-4 text-accent-pink shrink-0" />
+                  <span>สอบใกล้ถึง</span>
+                </h2>
                 <p className="text-xs text-ink-muted">รายการนัดสอบและวันสอบสำคัญ</p>
               </div>
               <Badge tone="pink">{upcomingExams.length} รายการ</Badge>
@@ -651,9 +730,13 @@ export function TodayPage() {
                         className="rounded-xl border border-accent-pink bg-accent-pink-soft/35 p-3.5"
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <Badge tone="pink">🎯 สอบ</Badge>
-                          <Badge tone={st.tone}>
-                            {st.icon} {st.label}
+                          <Badge tone="pink" className="inline-flex items-center gap-1">
+                            <IconTarget className="h-3 w-3 shrink-0" />
+                            <span>สอบ</span>
+                          </Badge>
+                          <Badge tone={st.tone} className="inline-flex items-center gap-1">
+                            {st.icon}
+                            <span>{st.label}</span>
                           </Badge>
                         </div>
                         <p className="mt-1.5 text-sm font-bold text-ink">{ex.title}</p>

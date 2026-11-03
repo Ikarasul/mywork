@@ -17,6 +17,29 @@ import GoogleCalendarSyncBar, {
 } from '../components/GoogleCalendarSyncBar'
 import RescheduleDialog, { type RescheduleSubmitPayload } from '../components/RescheduleDialog'
 import {
+  IconBookOpen,
+  IconCalendar,
+  IconCalendarDays,
+  IconClipboardList,
+  IconClock,
+  IconEye,
+  IconFileText,
+  IconHandshake,
+  IconLightbulb,
+  IconMapPin,
+  IconMessageCircle,
+  IconPauseCircle,
+  IconPencil,
+  IconPin,
+  IconRefreshCw,
+  IconRotateCcw,
+  IconSparkles,
+  IconTarget,
+  IconTrash,
+  IconVideo,
+  IconZap,
+} from '../components/icons'
+import {
   Badge,
   Button,
   Card,
@@ -996,8 +1019,9 @@ export function ClassSchedulePage() {
           {/* แถว "ทั้งวัน" (All-Day) แยกด้านบนสุดของตาราง ไม่ปะปนในแกนเวลา 07:00-20:00 */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-alt/80 px-3 py-2 text-xs">
             <div className="flex items-center gap-2 font-bold text-ink-secondary">
-              <span className="inline-flex items-center rounded-md border border-line-strong bg-surface px-2 py-0.5 text-[11px] font-extrabold text-primary">
-                📌 ทั้งวัน
+              <span className="inline-flex items-center gap-1 rounded-md border border-line-strong bg-surface px-2 py-0.5 text-[11px] font-extrabold text-primary">
+                <IconPin className="h-3.5 w-3.5" />
+                <span>ทั้งวัน</span>
               </span>
               <span>กิจกรรมตลอดทั้งวัน (แยกจากแกนเวลา 07:00–20:00)</span>
             </div>
@@ -1018,7 +1042,8 @@ export function ClassSchedulePage() {
                     <span className="rounded bg-surface px-1 py-0.2 font-mono text-[10px] text-ink">
                       {DAY_INFO[d].short}
                     </span>
-                    <span>🤝 {a.title}</span>
+                    <IconHandshake className="h-3 w-3" />
+                    <span>{a.title}</span>
                     <span className="text-[10px] opacity-80">(ทั้งวัน)</span>
                   </button>
                 ))}
@@ -1034,7 +1059,8 @@ export function ClassSchedulePage() {
                       <span className="rounded bg-surface px-1 py-0.2 font-mono text-[10px] text-ink">
                         {DAY_INFO[d].short}
                       </span>
-                      <span>📆 {ev.summary}</span>
+                      <IconCalendarDays className="h-3 w-3" />
+                      <span>{ev.summary}</span>
                       <span className="text-[10px] opacity-80">(ทั้งวัน)</span>
                     </button>
                   ))
@@ -1046,8 +1072,11 @@ export function ClassSchedulePage() {
           {/* แถบแนะนำการลากย้ายคาบเรียน/นัดหมาย + รายการคาบที่ถูกย้ายในสัปดาห์นี้ */}
           {(canEdit || appts.canManage) && (
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface px-3 py-2 text-[11px] text-ink-secondary">
-              <span>
-                💡 <strong>ลากบล็อกวิชาหรือนัดหมาย</strong> ไปวางในวัน/ช่องเวลาใหม่เพื่อย้ายคาบ (ล็อกทีละ 30 นาที) หรือ <strong>คลิกช่องว่างในตาราง</strong> เพื่อเพิ่มนัดใหม่ทันที
+              <span className="flex items-center gap-1.5">
+                <IconLightbulb className="h-3.5 w-3.5 shrink-0 text-accent-amber-fg" />
+                <span>
+                  <strong>ลากบล็อกวิชาหรือนัดหมาย</strong> ไปวางในวัน/ช่องเวลาใหม่เพื่อย้ายคาบ (ล็อกทีละ 30 นาที) หรือ <strong>คลิกช่องว่างในตาราง</strong> เพื่อเพิ่มนัดใหม่ทันที
+                </span>
               </span>
               {weekOverrides.length > 0 && (
                 <button
@@ -1056,9 +1085,10 @@ export function ClassSchedulePage() {
                     void reschedules.clearAllOverrides()
                     setStatusMessage('คืนค่าคาบเรียนที่ย้ายชั่วคราวทั้งหมดกลับสู่ตารางปกติแล้ว')
                   }}
-                  className="font-bold text-primary hover:underline"
+                  className="inline-flex items-center gap-1 font-bold text-primary hover:underline"
                 >
-                  ↩️ คืนค่าคาบที่ย้ายทั้งหมดในสัปดาห์นี้ ({weekOverrides.length})
+                  <IconRotateCcw className="h-3 w-3" />
+                  <span>คืนค่าคาบที่ย้ายทั้งหมดในสัปดาห์นี้ ({weekOverrides.length})</span>
                 </button>
               )}
             </div>
@@ -1066,7 +1096,10 @@ export function ClassSchedulePage() {
 
           {weekOverrides.some((o) => o.canceled) && (
             <div className="flex flex-wrap items-center gap-2 border-b border-dashed border-accent-amber bg-accent-amber-soft/25 px-3 py-1.5 text-[11px]">
-              <span className="font-bold text-accent-amber-fg">⏸️ คาบที่งดในสัปดาห์นี้:</span>
+              <span className="inline-flex items-center gap-1 font-bold text-accent-amber-fg">
+                <IconPauseCircle className="h-3.5 w-3.5" />
+                <span>คาบที่งดในสัปดาห์นี้:</span>
+              </span>
               {weekOverrides
                 .filter((o) => o.canceled)
                 .map((ov) => (
@@ -1085,9 +1118,10 @@ export function ClassSchedulePage() {
                           void reschedules.removeOverride(ov.id)
                           setStatusMessage(`คืนค่าคาบเรียนวิชา ${ov.course_code} แล้ว`)
                         }}
-                        className="font-bold text-primary hover:underline"
+                        className="inline-flex items-center gap-1 font-bold text-primary hover:underline"
                       >
-                        ↩️ คืนค่า
+                        <IconRotateCcw className="h-3 w-3" />
+                        <span>คืนค่า</span>
                       </button>
                     )}
                   </span>
@@ -1173,8 +1207,9 @@ export function ClassSchedulePage() {
                   >
                     {(dayAllDayEvents.length > 0 || dayAllDayAppts.length > 0) && (
                       <div className="flex flex-wrap items-center gap-1.5 border-b border-dashed border-line bg-surface-alt/60 px-2 py-1 text-[11px]">
-                        <span className="rounded bg-surface px-1.5 py-0.5 font-bold text-ink-secondary">
-                          📌 ทั้งวัน:
+                        <span className="inline-flex items-center gap-1 rounded bg-surface px-1.5 py-0.5 font-bold text-ink-secondary">
+                          <IconPin className="h-3 w-3 text-accent-pink" />
+                          <span>ทั้งวัน:</span>
                         </span>
                         {dayAllDayAppts.map((a) => (
                           <button
@@ -1183,7 +1218,8 @@ export function ClassSchedulePage() {
                             onClick={() => openApptDialog(a)}
                             className="inline-flex items-center gap-1 rounded-md border border-accent-amber bg-accent-amber-soft px-2 py-0.5 font-bold text-accent-amber-fg hover:opacity-90"
                           >
-                            <span>🤝 {a.title}</span>
+                            <IconHandshake className="h-3 w-3 shrink-0" />
+                            <span>{a.title}</span>
                           </button>
                         ))}
                         {dayAllDayEvents.map((ev, aIdx) => (
@@ -1193,7 +1229,8 @@ export function ClassSchedulePage() {
                             onClick={() => setSelectedGcalEvent(ev)}
                             className="inline-flex items-center gap-1 rounded-md border border-accent-sky bg-accent-sky-soft px-2 py-0.5 font-bold text-accent-sky-fg hover:opacity-90"
                           >
-                            <span>📆 {ev.summary}</span>
+                            <IconCalendar className="h-3 w-3 shrink-0" />
+                            <span>{ev.summary}</span>
                           </button>
                         ))}
                       </div>
@@ -1387,15 +1424,18 @@ export function ClassSchedulePage() {
                               <div className="mt-0.5 font-bold text-ink">
                                 {sess.course_name}
                               </div>
-                              <div className="mt-1 text-ink-secondary">
-                                ⏰ เวลา {sess.start}–{sess.end} น.
+                              <div className="mt-1 flex items-center gap-1 text-ink-secondary">
+                                <IconClock className="h-3 w-3" />
+                                <span>เวลา {sess.start}–{sess.end} น.</span>
                               </div>
-                              <div className="mt-0.5 text-ink-secondary">
-                                📍 {fullLocation}
+                              <div className="mt-0.5 flex items-center gap-1 text-ink-secondary">
+                                <IconMapPin className="h-3 w-3" />
+                                <span>{fullLocation}</span>
                               </div>
                               {sess.rescheduledInfo && (
-                                <div className="mt-1 font-semibold text-accent-amber-fg">
-                                  🔄 ย้ายมาจากวัน{DAY_INFO[sess.rescheduledInfo.originalDay].full} ({sess.rescheduledInfo.originalStart}–{sess.rescheduledInfo.originalEnd})
+                                <div className="mt-1 flex items-center gap-1 font-semibold text-accent-amber-fg">
+                                  <IconRotateCcw className="h-3 w-3" />
+                                  <span>ย้ายมาจากวัน{DAY_INFO[sess.rescheduledInfo.originalDay].full} ({sess.rescheduledInfo.originalStart}–{sess.rescheduledInfo.originalEnd})</span>
                                 </div>
                               )}
                             </div>
@@ -1407,8 +1447,9 @@ export function ClassSchedulePage() {
                                 </span>
                                 <div className="flex flex-wrap items-center gap-1">
                                   {sess.rescheduledInfo && (
-                                    <span className="rounded bg-accent-amber px-1.5 py-0.2 text-[9px] font-extrabold text-ink-inverted">
-                                      🔄 ย้ายคาบ
+                                    <span className="inline-flex items-center gap-1 rounded bg-accent-amber px-1.5 py-0.2 text-[9px] font-extrabold text-ink-inverted">
+                                      <IconRefreshCw className="h-2.5 w-2.5" />
+                                      <span>ย้ายคาบ</span>
                                     </span>
                                   )}
                                   {sess.online_link && (
@@ -1426,7 +1467,10 @@ export function ClassSchedulePage() {
                             <div
                               className={`mt-1 flex flex-wrap items-center justify-between gap-1 text-[11px] font-medium ${colorTheme.sub}`}
                             >
-                              <span>📍 {sess.room || '-'}</span>
+                              <span className="inline-flex items-center gap-0.5">
+                                <IconMapPin className="h-2.5 w-2.5" />
+                                <span>{sess.room || '-'}</span>
+                              </span>
                               <span className="font-mono">
                                 {sess.start}–{sess.end}
                               </span>
@@ -1438,14 +1482,14 @@ export function ClassSchedulePage() {
                                 courseStats.upcomingExamCount > 0) && (
                                 <div className="mt-1.5 flex flex-wrap items-center gap-1">
                                   {courseStats.pendingWorkCount > 0 && (
-                                    <span className="inline-flex items-center gap-0.5 rounded-md border border-status-warning bg-status-warning-soft px-1.5 py-0.5 text-[10px] font-bold text-status-warning-fg">
-                                      <span>📝</span>
+                                    <span className="inline-flex items-center gap-1 rounded-md border border-status-warning bg-status-warning-soft px-1.5 py-0.5 text-[10px] font-bold text-status-warning-fg">
+                                      <IconFileText className="h-2.5 w-2.5" />
                                       <span>{courseStats.pendingWorkCount} งานค้าง</span>
                                     </span>
                                   )}
                                   {courseStats.upcomingExamCount > 0 && (
-                                    <span className="inline-flex items-center gap-0.5 rounded-md border border-accent-pink bg-accent-pink-soft px-1.5 py-0.5 text-[10px] font-bold text-accent-pink-fg">
-                                      <span>🎯</span>
+                                    <span className="inline-flex items-center gap-1 rounded-md border border-accent-pink bg-accent-pink-soft px-1.5 py-0.5 text-[10px] font-bold text-accent-pink-fg">
+                                      <IconTarget className="h-2.5 w-2.5" />
                                       <span>
                                         สอบ
                                         {courseStats.nextExamCountdown
@@ -1465,9 +1509,10 @@ export function ClassSchedulePage() {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     onClick={(e) => e.stopPropagation()}
-                                    className="inline-flex items-center gap-0.5 rounded bg-surface px-1 py-0.5 text-[9px] font-bold text-accent-pink shadow-2xs hover:underline"
+                                    className="inline-flex items-center gap-1 rounded bg-surface px-1.5 py-0.5 text-[9px] font-bold text-accent-pink shadow-2xs hover:underline"
                                   >
-                                    🔗 Meet
+                                    <IconVideo className="h-2.5 w-2.5" />
+                                    <span>Meet</span>
                                   </a>
                                 )}
                                 {sess.contact_url && (
@@ -1476,9 +1521,10 @@ export function ClassSchedulePage() {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     onClick={(e) => e.stopPropagation()}
-                                    className="inline-flex items-center gap-0.5 rounded bg-surface px-1 py-0.5 text-[9px] font-bold text-status-success shadow-2xs hover:underline"
+                                    className="inline-flex items-center gap-1 rounded bg-surface px-1.5 py-0.5 text-[9px] font-bold text-status-success shadow-2xs hover:underline"
                                   >
-                                    💬 LINE
+                                    <IconMessageCircle className="h-2.5 w-2.5" />
+                                    <span>LINE</span>
                                   </a>
                                 )}
                                 {canEdit && (
@@ -1489,9 +1535,10 @@ export function ClassSchedulePage() {
                                       openRescheduleDialog(sess)
                                     }}
                                     title="ย้ายคาบเรียนหรือปรับเวลาเรียน"
-                                    className="inline-flex items-center gap-0.5 rounded bg-surface/90 px-1.5 py-0.5 text-[9px] font-bold text-ink shadow-2xs hover:bg-surface"
+                                    className="inline-flex items-center gap-1 rounded bg-surface/90 px-1.5 py-0.5 text-[9px] font-bold text-ink shadow-2xs hover:bg-surface"
                                   >
-                                    🔄 ย้ายคาบ
+                                    <IconRefreshCw className="h-2.5 w-2.5" />
+                                    <span>ย้ายคาบ</span>
                                   </button>
                                 )}
                               </div>
@@ -1533,8 +1580,11 @@ export function ClassSchedulePage() {
                             className="z-10 mx-0.5 cursor-pointer rounded-xl border border-dashed border-accent-sky bg-accent-sky-soft/75 p-1.5 text-[11px] text-accent-sky-fg shadow-2xs transition hover:opacity-95"
                           >
                             <div className="flex items-center justify-between gap-1">
-                              <span className="font-bold">📆 {ev.summary}</span>
-                              <span className="font-mono text-[10px]">
+                              <span className="flex items-center gap-1 font-bold">
+                                <IconCalendarDays className="h-3 w-3 shrink-0" />
+                                <span className="truncate">{ev.summary}</span>
+                              </span>
+                              <span className="shrink-0 font-mono text-[10px]">
                                 {ev.startTime}–{ev.endTime}
                               </span>
                             </div>
@@ -1586,13 +1636,19 @@ export function ClassSchedulePage() {
                             }`}
                           >
                             <div className="flex items-center justify-between gap-1">
-                              <span className="truncate font-bold">🤝 {a.title}</span>
+                              <span className="flex items-center gap-1 truncate font-bold">
+                                <IconHandshake className="h-3 w-3 shrink-0" />
+                                <span className="truncate">{a.title}</span>
+                              </span>
                               <span className="shrink-0 font-mono text-[10px]">
                                 {a.start_time}–{a.end_time}
                               </span>
                             </div>
                             {a.location && (
-                              <div className="truncate text-[10px] opacity-90">📍 {a.location}</div>
+                              <div className="flex items-center gap-1 truncate text-[10px] opacity-90">
+                                <IconMapPin className="h-2.5 w-2.5 shrink-0" />
+                                <span className="truncate">{a.location}</span>
+                              </div>
                             )}
                           </button>
                         )
@@ -1619,9 +1675,26 @@ export function ClassSchedulePage() {
                 รายวิชาที่ลงทะเบียน:{' '}
                 <span className="font-pixel text-primary">{currentSemesterInfo.code}</span>
               </h1>
-              <Badge tone="primary">📚 {summaryStats.courseCount} วิชา</Badge>
-              <Badge tone="amber">⚡ {summaryStats.totalCredits} หน่วยกิต</Badge>
-              {isLoggedInViewer && <Badge tone="warning">👁️ โหมดดูอย่างเดียว</Badge>}
+              <Badge tone="primary">
+                <span className="inline-flex items-center gap-1">
+                  <IconBookOpen className="h-3 w-3" />
+                  <span>{summaryStats.courseCount} วิชา</span>
+                </span>
+              </Badge>
+              <Badge tone="amber">
+                <span className="inline-flex items-center gap-1">
+                  <IconZap className="h-3 w-3" />
+                  <span>{summaryStats.totalCredits} หน่วยกิต</span>
+                </span>
+              </Badge>
+              {isLoggedInViewer && (
+                <Badge tone="warning">
+                  <span className="inline-flex items-center gap-1">
+                    <IconEye className="h-3 w-3" />
+                    <span>โหมดดูอย่างเดียว</span>
+                  </span>
+                </Badge>
+              )}
             </div>
             <p className="mt-1 text-xs font-medium text-ink-muted">
               68067967 — ราเวน อาร์เนสัน • ช่วงเรียนปกติ ({currentSemesterInfo.period}) • วันนี้:{' '}
@@ -1656,7 +1729,7 @@ export function ClassSchedulePage() {
               onClick={() => openApptDialog(null)}
               className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-accent-amber bg-accent-amber-soft px-3 py-1.5 text-xs font-bold text-accent-amber-fg shadow-2xs transition hover:opacity-90 sm:min-h-[38px]"
             >
-              <span>🤝</span>
+              <IconHandshake className="h-4 w-4" />
               <span>+ เพิ่มนัด</span>
               {weekApptCount > 0 && (
                 <span className="rounded-full bg-surface px-1.5 py-0.5 font-mono text-[10px] text-ink">
@@ -1669,24 +1742,26 @@ export function ClassSchedulePage() {
               <button
                 type="button"
                 onClick={() => setActiveTab('weekly')}
-                className={`min-h-[38px] rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+                className={`inline-flex items-center gap-1.5 min-h-[38px] rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
                   activeTab === 'weekly'
                     ? 'bg-primary text-ink-inverted shadow-2xs'
                     : 'text-ink-secondary hover:text-ink'
                 }`}
               >
-                📅 Week (ตารางรายสัปดาห์)
+                <IconCalendar className="h-3.5 w-3.5" />
+                <span>Week (ตารางรายสัปดาห์)</span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('list')}
-                className={`min-h-[38px] rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+                className={`inline-flex items-center gap-1.5 min-h-[38px] rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
                   activeTab === 'list'
                     ? 'bg-primary text-ink-inverted shadow-2xs'
                     : 'text-ink-secondary hover:text-ink'
                 }`}
               >
-                📋 ตาราง (รายการวิชา)
+                <IconClipboardList className="h-3.5 w-3.5" />
+                <span>ตาราง (รายการวิชา)</span>
               </button>
             </div>
           </div>
@@ -1716,7 +1791,10 @@ export function ClassSchedulePage() {
                 onClick={() => void handleDeduplicateSchedule()}
                 title="ตรวจสอบและลบวิชาที่ซ้ำออกทันที"
               >
-                🧹 ล้างแถวซ้ำ
+                <span className="inline-flex items-center gap-1">
+                  <IconSparkles className="h-3.5 w-3.5" />
+                  <span>ล้างแถวซ้ำ</span>
+                </span>
               </Button>
 
               <input
@@ -2156,8 +2234,9 @@ export function ClassSchedulePage() {
                   (ev) => ev.day === selectedMobileDay && ev.isAllDay,
                 ) && (
                   <div className="rounded-xl border border-line bg-surface-alt p-3">
-                    <div className="text-xs font-extrabold text-primary">
-                      📌 ทั้งวัน (กิจกรรมตลอดทั้งวัน)
+                    <div className="flex items-center gap-1.5 text-xs font-extrabold text-primary">
+                      <IconPin className="h-3.5 w-3.5 text-accent-pink" />
+                      <span>ทั้งวัน (กิจกรรมตลอดทั้งวัน)</span>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {gcal.events
@@ -2169,7 +2248,8 @@ export function ClassSchedulePage() {
                             onClick={() => setSelectedGcalEvent(ev)}
                             className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl border border-accent-sky bg-accent-sky-soft px-3 py-1.5 text-xs font-bold text-accent-sky-fg"
                           >
-                            <span>📆 {ev.summary}</span>
+                            <IconCalendar className="h-3.5 w-3.5 shrink-0" />
+                            <span>{ev.summary}</span>
                             <span className="text-[10px] opacity-80">(ทั้งวัน)</span>
                           </button>
                         ))}
@@ -2214,7 +2294,10 @@ export function ClassSchedulePage() {
                               {sess.course_code}
                             </span>
                             {sess.rescheduledInfo && (
-                              <Badge tone="amber">🔄 ย้ายคาบ</Badge>
+                              <Badge tone="amber" className="inline-flex items-center gap-1">
+                                <IconRefreshCw className="h-3 w-3 shrink-0" />
+                                <span>ย้ายคาบ</span>
+                              </Badge>
                             )}
                           </div>
                           <span className="font-mono text-xs font-bold">
@@ -2228,7 +2311,10 @@ export function ClassSchedulePage() {
                           </p>
                         )}
                         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
-                          <span>📍 ห้อง {sess.room || '-'} (Sec {sess.section})</span>
+                          <span className="inline-flex items-center gap-1">
+                            <IconMapPin className="h-3 w-3 shrink-0" />
+                            <span>ห้อง {sess.room || '-'} (Sec {sess.section})</span>
+                          </span>
                           {sess.online_link && (
                             <Badge tone="mint">มีเรียนออนไลน์</Badge>
                           )}
@@ -2240,13 +2326,13 @@ export function ClassSchedulePage() {
                             <div className="mt-2 flex flex-wrap items-center gap-1.5">
                               {courseStats.pendingWorkCount > 0 && (
                                 <span className="inline-flex items-center gap-1 rounded-md border border-status-warning bg-status-warning-soft px-2 py-0.5 text-[11px] font-bold text-status-warning-fg">
-                                  <span>📝</span>
+                                  <IconFileText className="h-3 w-3 shrink-0" />
                                   <span>{courseStats.pendingWorkCount} งานค้าง</span>
                                 </span>
                               )}
                               {courseStats.upcomingExamCount > 0 && (
                                 <span className="inline-flex items-center gap-1 rounded-md border border-accent-pink bg-accent-pink-soft px-2 py-0.5 text-[11px] font-bold text-accent-pink-fg">
-                                  <span>🎯</span>
+                                  <IconTarget className="h-3 w-3 shrink-0" />
                                   <span>
                                     สอบ
                                     {courseStats.nextExamCountdown
@@ -2269,7 +2355,8 @@ export function ClassSchedulePage() {
                                   onClick={(e) => e.stopPropagation()}
                                   className="inline-flex items-center gap-1.5 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-accent-pink shadow-2xs hover:underline"
                                 >
-                                  <span>🔗 Click online classes</span>
+                                  <IconVideo className="h-3.5 w-3.5 shrink-0" />
+                                  <span>Click online classes</span>
                                   <span>↗</span>
                                 </a>
                               )}
@@ -2281,7 +2368,8 @@ export function ClassSchedulePage() {
                                   onClick={(e) => e.stopPropagation()}
                                   className="inline-flex items-center gap-1.5 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-status-success shadow-2xs hover:underline"
                                 >
-                                  <span>💬 Contact (LINE กลุ่ม)</span>
+                                  <IconMessageCircle className="h-3.5 w-3.5 shrink-0" />
+                                  <span>Contact (LINE กลุ่ม)</span>
                                   <span>↗</span>
                                 </a>
                               )}
@@ -2295,7 +2383,8 @@ export function ClassSchedulePage() {
                                 }}
                                 className="inline-flex items-center gap-1 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-ink shadow-2xs hover:bg-surface-hover"
                               >
-                                🔄 ย้ายคาบ
+                                <IconRefreshCw className="h-3 w-3 shrink-0" />
+                                <span>ย้ายคาบ</span>
                               </button>
                             )}
                           </div>
@@ -2314,12 +2403,18 @@ export function ClassSchedulePage() {
                   className="block w-full rounded-xl border-l-4 border-accent-amber bg-accent-amber-soft p-3.5 text-left text-accent-amber-fg shadow-2xs"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <Badge tone="amber">🤝 นัดหมาย</Badge>
+                    <Badge tone="amber" className="inline-flex items-center gap-1">
+                      <IconHandshake className="h-3 w-3 shrink-0" />
+                      <span>นัดหมาย</span>
+                    </Badge>
                     <span className="font-mono text-xs font-bold">{formatApptTimeLabel(a)}</span>
                   </div>
                   <p className="mt-1.5 text-sm font-bold text-ink">{a.title}</p>
                   {a.location && (
-                    <p className="mt-0.5 text-xs text-ink-secondary">📍 {a.location}</p>
+                    <p className="mt-0.5 flex items-center gap-1 text-xs text-ink-secondary">
+                      <IconMapPin className="h-3 w-3 shrink-0" />
+                      <span>{a.location}</span>
+                    </p>
                   )}
                 </button>
               ))}
@@ -2335,15 +2430,25 @@ export function ClassSchedulePage() {
                       className="cursor-pointer rounded-xl border border-dashed border-accent-sky bg-accent-sky-soft/70 p-3.5 text-accent-sky-fg shadow-2xs"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <Badge tone="sky">📆 Google Calendar</Badge>
+                        <Badge tone="sky" className="inline-flex items-center gap-1">
+                          <IconCalendar className="h-3 w-3 shrink-0" />
+                          <span>Google Calendar</span>
+                        </Badge>
                         <span className="font-mono text-xs font-bold">
                           {ev.startTime} – {ev.endTime}
                         </span>
                       </div>
                       <p className="mt-1.5 text-sm font-bold text-ink">{ev.summary}</p>
                       <div className="mt-2 flex items-center justify-between text-xs">
-                        <span className="text-ink-secondary">
-                          {ev.location ? `📍 ${ev.location}` : 'อ่านอย่างเดียว'}
+                        <span className="inline-flex items-center gap-1 text-ink-secondary">
+                          {ev.location ? (
+                            <>
+                              <IconMapPin className="h-3 w-3 shrink-0" />
+                              <span>{ev.location}</span>
+                            </>
+                          ) : (
+                            'อ่านอย่างเดียว'
+                          )}
                         </span>
                         <a
                           href={ev.htmlLink}
@@ -2372,7 +2477,10 @@ export function ClassSchedulePage() {
         /* มุมมองที่ 2: ตารางรายวิชาที่ลงทะเบียน */
         <Card padding="none" className="overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-2 bg-accent-amber px-5 py-3 text-sm font-bold text-ink-inverted">
-            <span>📖 ช่วงเรียนปกติ ({currentSemesterInfo.period})</span>
+            <span className="inline-flex items-center gap-1.5">
+              <IconBookOpen className="h-4 w-4 shrink-0" />
+              <span>ช่วงเรียนปกติ ({currentSemesterInfo.period})</span>
+            </span>
             <span className="text-xs font-normal opacity-90">
               คลิกที่แถววิชาเพื่อเปิดป็อปอัพรายละเอียดวิชา ลิงก์เรียนออนไลน์ งานค้าง และนัดสอบ
             </span>
@@ -2448,8 +2556,9 @@ export function ClassSchedulePage() {
                                   {s.course_code}
                                 </span>
                                 {courseStats && courseStats.pendingWorkCount > 0 && (
-                                  <Badge tone="warning">
-                                    📝 {courseStats.pendingWorkCount} งานค้าง
+                                  <Badge tone="warning" className="inline-flex items-center gap-1">
+                                    <IconFileText className="h-3 w-3 shrink-0" />
+                                    <span>{courseStats.pendingWorkCount} งานค้าง</span>
                                   </Badge>
                                 )}
                               </div>
@@ -2478,8 +2587,9 @@ export function ClassSchedulePage() {
                           {s.start}–{s.end}
                         </td>
                         <td className="py-4 px-3">
-                          <div className="font-mono text-xs font-bold text-ink">
-                            📍 {s.room || '-'}
+                          <div className="flex items-center gap-1 font-mono text-xs font-bold text-ink">
+                            <IconMapPin className="h-3 w-3 shrink-0 text-accent-pink" />
+                            <span>{s.room || '-'}</span>
                           </div>
                           {roomDetail && (
                             <div className="mt-0.5 text-[11px] text-ink-muted">
@@ -2497,7 +2607,8 @@ export function ClassSchedulePage() {
                               onClick={(e) => e.stopPropagation()}
                               className="mt-1.5 inline-flex items-center gap-1 rounded-lg border border-status-success/40 bg-status-success-soft px-2 py-0.5 text-[11px] font-bold text-status-success shadow-2xs hover:underline"
                             >
-                              <span>💬 Contact (LINE)</span>
+                              <IconMessageCircle className="h-3 w-3 shrink-0" />
+                              <span>Contact (LINE)</span>
                               <span>↗</span>
                             </a>
                           )}
@@ -2514,7 +2625,8 @@ export function ClassSchedulePage() {
                                   onClick={(e) => e.stopPropagation()}
                                   className="inline-flex items-center gap-1 text-[11px] font-bold text-accent-pink hover:underline"
                                 >
-                                  <span>🔗 Click online classes ↗</span>
+                                  <IconVideo className="h-3 w-3 shrink-0" />
+                                  <span>Click online classes ↗</span>
                                 </a>
                               ) : (
                                 <div className="text-[11px] font-semibold text-accent-pink">
@@ -2528,8 +2640,9 @@ export function ClassSchedulePage() {
                         </td>
                         <td className="py-4 px-3 text-center">
                           {courseStats && courseStats.upcomingExamCount > 0 ? (
-                            <Badge tone="pink">
-                              🎯 มีสอบ ({courseStats.upcomingExamCount})
+                            <Badge tone="pink" className="inline-flex items-center gap-1">
+                              <IconTarget className="h-3 w-3 shrink-0" />
+                              <span>มีสอบ ({courseStats.upcomingExamCount})</span>
                             </Badge>
                           ) : (
                             <Badge tone="neutral">ไม่จัดสอบ</Badge>
@@ -2547,7 +2660,8 @@ export function ClassSchedulePage() {
                                 }}
                                 className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-primary transition hover:bg-primary-soft"
                               >
-                                ✏️ แก้คาบ
+                                <IconPencil className="h-3 w-3 shrink-0" />
+                                <span>แก้คาบ</span>
                               </button>
                               <button
                                 type="button"
@@ -2558,7 +2672,8 @@ export function ClassSchedulePage() {
                                 }}
                                 className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-status-danger transition hover:bg-status-danger-soft"
                               >
-                                🗑️ ลบ
+                                <IconTrash className="h-3 w-3 shrink-0" />
+                                <span>ลบ</span>
                               </button>
                             </div>
                           </td>

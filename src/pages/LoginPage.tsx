@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import GoogleCalendarSyncBar from '../components/GoogleCalendarSyncBar'
+import { IconEye } from '../components/icons'
 import PixelCat from '../components/PixelCat'
 import { Badge, Button, Card, Toast } from '../components/ui'
 import { getRoleLabelThai, useAuth } from '../lib/auth'
@@ -69,10 +70,15 @@ export function LoginPage() {
               </p>
             </div>
           </div>
-          <Badge tone={currentRole === 'viewer' ? 'warning' : 'primary'}>
-            {currentRole === 'viewer'
-              ? '👁️ โหมดดูอย่างเดียว (ผู้ชม)'
-              : `สิทธิ์: ${getRoleLabelThai(currentRole)}`}
+          <Badge tone={currentRole === 'viewer' ? 'warning' : 'primary'} className="inline-flex items-center gap-1">
+            {currentRole === 'viewer' ? (
+              <>
+                <IconEye className="h-3 w-3 shrink-0" />
+                <span>โหมดดูอย่างเดียว (ผู้ชม)</span>
+              </>
+            ) : (
+              `สิทธิ์: ${getRoleLabelThai(currentRole)}`
+            )}
           </Badge>
         </div>
 

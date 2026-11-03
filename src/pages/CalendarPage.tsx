@@ -4,6 +4,29 @@ import AppointmentDialog from '../components/AppointmentDialog'
 import GoogleCalendarSyncBar, {
   GoogleCalendarEventModal,
 } from '../components/GoogleCalendarSyncBar'
+import {
+  IconBookOpen,
+  IconCalendar,
+  IconCalendarDays,
+  IconChevronLeft,
+  IconChevronRight,
+  IconClipboardList,
+  IconClock,
+  IconCoffee,
+  IconExternalLink,
+  IconFileText,
+  IconHandshake,
+  IconLightbulb,
+  IconMapPin,
+  IconMessageCircle,
+  IconPlus,
+  IconRefreshCw,
+  IconRotateCcw,
+  IconTarget,
+  IconVideo,
+  IconX,
+  IconZap,
+} from '../components/icons'
 import PixelCat from '../components/PixelCat'
 import RescheduleDialog, { type RescheduleSubmitPayload } from '../components/RescheduleDialog'
 import {
@@ -555,7 +578,7 @@ export function CalendarPage() {
     switch (type) {
       case 'class':
         return {
-          icon: '📚',
+          icon: <IconBookOpen className="h-3.5 w-3.5 shrink-0" />,
           badgeText: 'คาบเรียน',
           bg: 'bg-primary-soft/40 hover:bg-primary-soft/70',
           border: 'border-l-[3.5px] border-l-primary border-line',
@@ -564,7 +587,7 @@ export function CalendarPage() {
         }
       case 'routine':
         return {
-          icon: '⏰',
+          icon: <IconClock className="h-3.5 w-3.5 shrink-0" />,
           badgeText: 'กิจวัตร',
           bg: 'bg-accent-mint-soft/40 hover:bg-accent-mint-soft/70',
           border: 'border-l-[3.5px] border-l-accent-mint border-line',
@@ -573,7 +596,7 @@ export function CalendarPage() {
         }
       case 'exam':
         return {
-          icon: '🎯',
+          icon: <IconTarget className="h-3.5 w-3.5 shrink-0" />,
           badgeText: 'วันสอบ',
           bg: 'bg-accent-pink-soft/50 hover:bg-accent-pink-soft/80',
           border: 'border-l-[3.5px] border-l-accent-pink border-line',
@@ -582,7 +605,7 @@ export function CalendarPage() {
         }
       case 'task':
         return {
-          icon: '📝',
+          icon: <IconFileText className="h-3.5 w-3.5 shrink-0" />,
           badgeText: 'งาน/การบ้าน',
           bg: 'bg-accent-amber-soft/40 hover:bg-accent-amber-soft/70',
           border: 'border-l-[3.5px] border-l-accent-amber border-line',
@@ -591,7 +614,7 @@ export function CalendarPage() {
         }
       case 'appt':
         return {
-          icon: '🤝',
+          icon: <IconHandshake className="h-3.5 w-3.5 shrink-0" />,
           badgeText: 'นัดหมาย',
           bg: 'bg-accent-amber-soft/60 hover:bg-accent-amber-soft',
           border: 'border-l-[3.5px] border-l-accent-amber border-line',
@@ -601,7 +624,7 @@ export function CalendarPage() {
       case 'gcal':
       default:
         return {
-          icon: '📆',
+          icon: <IconCalendarDays className="h-3.5 w-3.5 shrink-0" />,
           badgeText: 'Google',
           bg: 'bg-accent-sky-soft/40 hover:bg-accent-sky-soft/70',
           border: 'border-l-[3.5px] border-l-accent-sky border-line',
@@ -684,7 +707,7 @@ export function CalendarPage() {
                 : 'border-line bg-surface-alt text-ink-muted opacity-60'
             }`}
           >
-            <span>📚</span>
+            <IconBookOpen className="h-3.5 w-3.5 shrink-0" />
             <span>ตารางเรียน</span>
           </button>
 
@@ -697,7 +720,7 @@ export function CalendarPage() {
                 : 'border-line bg-surface-alt text-ink-muted opacity-60'
             }`}
           >
-            <span>⏰</span>
+            <IconClock className="h-3.5 w-3.5 shrink-0" />
             <span>กิจวัตรชีวิต</span>
           </button>
 
@@ -710,7 +733,7 @@ export function CalendarPage() {
                 : 'border-line bg-surface-alt text-ink-muted opacity-60'
             }`}
           >
-            <span>📝</span>
+            <IconFileText className="h-3.5 w-3.5 shrink-0" />
             <span>งาน/การบ้าน</span>
           </button>
 
@@ -723,7 +746,7 @@ export function CalendarPage() {
                 : 'border-line bg-surface-alt text-ink-muted opacity-60'
             }`}
           >
-            <span>🎯</span>
+            <IconTarget className="h-3.5 w-3.5 shrink-0" />
             <span>วันสอบ</span>
           </button>
 
@@ -736,7 +759,7 @@ export function CalendarPage() {
                 : 'border-line bg-surface-alt text-ink-muted opacity-60'
             }`}
           >
-            <span>📆</span>
+            <IconCalendarDays className="h-3.5 w-3.5 shrink-0" />
             <span>Google Calendar</span>
           </button>
 
@@ -749,7 +772,7 @@ export function CalendarPage() {
                 : 'border-line bg-surface-alt text-ink-muted opacity-60'
             }`}
           >
-            <span>🤝</span>
+            <IconHandshake className="h-3.5 w-3.5 shrink-0" />
             <span>นัดหมาย</span>
           </button>
 
@@ -758,7 +781,8 @@ export function CalendarPage() {
             onClick={() => setApptDialog({ open: true, item: null })}
             className="ml-auto flex min-h-[44px] items-center gap-1.5 rounded-xl bg-primary px-3.5 py-1.5 text-xs font-bold text-ink-inverted shadow-2xs transition hover:bg-primary-hover sm:min-h-[36px]"
           >
-            <span>+ เพิ่มนัด</span>
+            <IconPlus className="h-3.5 w-3.5 shrink-0" />
+            <span>เพิ่มนัด</span>
           </button>
         </div>
       </Card>
@@ -775,14 +799,14 @@ export function CalendarPage() {
                 title="ย้อนกลับ"
                 className="flex min-h-[42px] min-w-[42px] items-center justify-center rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm font-bold text-ink shadow-2xs transition hover:bg-surface-hover"
               >
-                ◀
+                <IconChevronLeft className="h-4 w-4" />
               </button>
               <button
                 type="button"
                 onClick={handleToday}
                 className="flex min-h-[42px] items-center gap-1.5 rounded-xl border border-primary/40 bg-primary-soft px-3.5 py-2 text-xs sm:text-sm font-bold text-primary shadow-2xs transition hover:bg-primary hover:text-ink-inverted"
               >
-                <span>⚡</span>
+                <IconZap className="h-4 w-4 shrink-0" />
                 <span>กลับไปวันนี้</span>
               </button>
               <button
@@ -791,7 +815,7 @@ export function CalendarPage() {
                 title="ถัดไป"
                 className="flex min-h-[42px] min-w-[42px] items-center justify-center rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm font-bold text-ink shadow-2xs transition hover:bg-surface-hover"
               >
-                ▶
+                <IconChevronRight className="h-4 w-4" />
               </button>
             </div>
 
@@ -824,7 +848,7 @@ export function CalendarPage() {
                     : 'text-ink-secondary hover:text-ink hover:bg-surface/60'
                 }`}
               >
-                <span>📅</span>
+                <IconCalendar className="h-4 w-4 shrink-0" />
                 <span>สัปดาห์นี้</span>
               </button>
 
@@ -837,7 +861,7 @@ export function CalendarPage() {
                     : 'text-ink-secondary hover:text-ink hover:bg-surface/60'
                 }`}
               >
-                <span>🗓️</span>
+                <IconCalendarDays className="h-4 w-4 shrink-0" />
                 <span>ทั้งเดือน</span>
               </button>
 
@@ -850,7 +874,7 @@ export function CalendarPage() {
                     : 'text-ink-secondary hover:text-ink hover:bg-surface/60'
                 }`}
               >
-                <span>📋</span>
+                <IconClipboardList className="h-4 w-4 shrink-0" />
                 <span>กำหนดการ</span>
               </button>
             </div>
@@ -874,8 +898,11 @@ export function CalendarPage() {
         <Card padding="none" className="overflow-hidden border-line shadow-xs">
           {canManage && (
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-alt/60 px-4 py-2 text-[11px] text-ink-secondary">
-              <span>
-                💡 <strong>ลากการ์ดวิชาเรียนหรือนัดหมาย</strong> ข้ามวันเพื่อย้ายคาบ/เลื่อนนัดได้ทันที หรือคลิกที่การ์ดเพื่อดูรายละเอียด
+              <span className="inline-flex items-center gap-1.5">
+                <IconLightbulb className="h-3.5 w-3.5 text-accent-amber-fg shrink-0" />
+                <span>
+                  <strong>ลากการ์ดวิชาเรียนหรือนัดหมาย</strong> ข้ามวันเพื่อย้ายคาบ/เลื่อนนัดได้ทันที หรือคลิกที่การ์ดเพื่อดูรายละเอียด
+                </span>
               </span>
               {reschedules.overrides.length > 0 && (
                 <button
@@ -884,9 +911,10 @@ export function CalendarPage() {
                     void reschedules.clearAllOverrides()
                     setToastMsg('คืนค่าคาบเรียนที่ย้ายชั่วคราวทั้งหมดกลับสู่ตารางปกติแล้ว')
                   }}
-                  className="font-bold text-primary hover:underline"
+                  className="inline-flex items-center gap-1 font-bold text-primary hover:underline"
                 >
-                  ↩️ คืนค่าคาบที่ย้ายทั้งหมด ({reschedules.overrides.length})
+                  <IconRotateCcw className="h-3 w-3 shrink-0" />
+                  <span>คืนค่าคาบที่ย้ายทั้งหมด ({reschedules.overrides.length})</span>
                 </button>
               )}
             </div>
@@ -966,7 +994,7 @@ export function CalendarPage() {
                     <div className="flex-1 space-y-2 p-2 min-h-[340px]">
                       {dayEvents.length === 0 ? (
                         <div className="flex h-32 flex-col items-center justify-center text-center text-xs text-ink-muted/40 select-none">
-                          <span className="text-base opacity-40">☕</span>
+                          <IconCoffee className="h-6 w-6 opacity-40" />
                           <span className="mt-1 text-[11px]">ไม่มีกิจกรรม</span>
                         </div>
                       ) : (
@@ -1008,13 +1036,17 @@ export function CalendarPage() {
                                   {ev.timeLabel}
                                 </span>
                                 <span
-                                  className={`inline-flex max-w-full items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-bold leading-tight ${
+                                  className={`inline-flex max-w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold leading-tight ${
                                     isRescheduled
                                       ? 'bg-accent-amber/25 text-accent-amber-fg border border-accent-amber/40'
                                       : theme.chipClass
                                   }`}
                                 >
-                                  <span>{isRescheduled ? '🔄' : theme.icon}</span>
+                                  {isRescheduled ? (
+                                    <IconRefreshCw className="h-2.5 w-2.5 shrink-0" />
+                                  ) : (
+                                    theme.icon
+                                  )}
                                   <span className="truncate">
                                     {isRescheduled ? 'ย้ายคาบ' : theme.badgeText}
                                   </span>
@@ -1042,7 +1074,7 @@ export function CalendarPage() {
                               {/* สถานที่ / ห้องเรียน */}
                               {ev.location && (
                                 <p className="mt-1 flex items-center gap-1 text-[11px] text-ink-muted">
-                                  <span>📍</span>
+                                  <IconMapPin className="h-3 w-3 shrink-0 text-accent-pink" />
                                   <span className="truncate">{ev.location}</span>
                                 </p>
                               )}
@@ -1058,10 +1090,11 @@ export function CalendarPage() {
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       onClick={(e) => e.stopPropagation()}
-                                      className="inline-flex items-center gap-0.5 rounded-md border border-accent-pink/30 bg-accent-pink-soft/80 px-1.5 py-0.5 text-[10px] font-bold text-accent-pink shadow-2xs transition hover:bg-accent-pink hover:text-ink-inverted"
+                                      className="inline-flex items-center gap-1 rounded-md border border-accent-pink/30 bg-accent-pink-soft/80 px-1.5 py-0.5 text-[10px] font-bold text-accent-pink shadow-2xs transition hover:bg-accent-pink hover:text-ink-inverted"
                                     >
-                                      <span>🔗 Meet</span>
-                                      <span>↗</span>
+                                      <IconVideo className="h-3 w-3 shrink-0" />
+                                      <span>Meet</span>
+                                      <IconExternalLink className="h-2.5 w-2.5 opacity-70" />
                                     </a>
                                   )}
                                   {ev.rawClass?.contact_url && (
@@ -1070,10 +1103,11 @@ export function CalendarPage() {
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       onClick={(e) => e.stopPropagation()}
-                                      className="inline-flex items-center gap-0.5 rounded-md border border-status-success/30 bg-status-success-soft/80 px-1.5 py-0.5 text-[10px] font-bold text-status-success shadow-2xs transition hover:bg-status-success hover:text-ink-inverted"
+                                      className="inline-flex items-center gap-1 rounded-md border border-status-success/30 bg-status-success-soft/80 px-1.5 py-0.5 text-[10px] font-bold text-status-success shadow-2xs transition hover:bg-status-success hover:text-ink-inverted"
                                     >
-                                      <span>💬 LINE</span>
-                                      <span>↗</span>
+                                      <IconMessageCircle className="h-3 w-3 shrink-0" />
+                                      <span>LINE</span>
+                                      <IconExternalLink className="h-2.5 w-2.5 opacity-70" />
                                     </a>
                                   )}
                                   {canManage && ev.rawClass && (
@@ -1090,9 +1124,10 @@ export function CalendarPage() {
                                           targetDate: day.dateKey,
                                         })
                                       }}
-                                      className="inline-flex items-center gap-0.5 rounded-md border border-accent-amber/40 bg-accent-amber-soft px-1.5 py-0.5 text-[10px] font-bold text-accent-amber-fg transition hover:opacity-90"
+                                      className="inline-flex items-center gap-1 rounded-md border border-accent-amber/40 bg-accent-amber-soft px-1.5 py-0.5 text-[10px] font-bold text-accent-amber-fg transition hover:opacity-90"
                                     >
-                                      🔄 ย้ายคาบ
+                                      <IconRefreshCw className="h-2.5 w-2.5 shrink-0" />
+                                      <span>ย้ายคาบ</span>
                                     </button>
                                   )}
                                 </div>
@@ -1196,12 +1231,16 @@ export function CalendarPage() {
                               setDraggingEvent(null)
                               setDragOverDateKey(null)
                             }}
-                            className={`truncate rounded px-1.5 py-0.5 text-[10px] font-semibold ${theme.bg} text-ink ${
+                            className={`flex items-center gap-1 truncate rounded px-1.5 py-0.5 text-[10px] font-semibold ${theme.bg} text-ink ${
                               isDraggable ? 'cursor-grab active:cursor-grabbing' : ''
                             }`}
                           >
-                            <span>{ev.rawClass?.rescheduledInfo ? '🔄' : theme.icon}</span>{' '}
-                            <span>{ev.title}</span>
+                            {ev.rawClass?.rescheduledInfo ? (
+                              <IconRefreshCw className="h-2.5 w-2.5 shrink-0 text-accent-amber-fg" />
+                            ) : (
+                              theme.icon
+                            )}
+                            <span className="truncate">{ev.title}</span>
                           </div>
                         )
                       })}
@@ -1248,8 +1287,9 @@ export function CalendarPage() {
                       className={`cursor-pointer rounded-xl border p-3 transition hover:shadow-2xs ${theme.bg} ${theme.border}`}
                     >
                       <div className="flex items-center justify-between gap-1">
-                        <Badge tone={theme.badgeTone}>
-                          {theme.icon} {theme.badgeText}
+                        <Badge tone={theme.badgeTone} className="inline-flex items-center gap-1">
+                          {theme.icon}
+                          <span>{theme.badgeText}</span>
                         </Badge>
                         <span className="font-mono text-xs font-bold text-ink">
                           {ev.timeLabel}
@@ -1257,7 +1297,10 @@ export function CalendarPage() {
                       </div>
                       <p className="mt-1.5 text-sm font-bold text-ink">{ev.title}</p>
                       {ev.location && (
-                        <p className="mt-0.5 text-xs text-ink-muted">📍 {ev.location}</p>
+                        <p className="mt-0.5 flex items-center gap-1 text-xs text-ink-muted">
+                          <IconMapPin className="h-3 w-3 shrink-0 text-accent-pink" />
+                          <span>{ev.location}</span>
+                        </p>
                       )}
                     </div>
                   )
@@ -1270,8 +1313,9 @@ export function CalendarPage() {
         /* ================= 3. มุมมองกำหนดการ (Agenda Timeline) ================= */
         <Card className="space-y-4">
           <div className="border-b border-line pb-3">
-            <h2 className="text-base font-bold text-ink">
-              📋 กำหนดการทั้งหมดในเดือน {formatMonthYearThai(currentDate)}
+            <h2 className="flex items-center gap-2 text-base font-bold text-ink">
+              <IconClipboardList className="h-4 w-4 shrink-0 text-primary" />
+              <span>กำหนดการทั้งหมดในเดือน {formatMonthYearThai(currentDate)}</span>
             </h2>
             <p className="text-xs text-ink-muted">
               เรียงลำดับตามวันและเวลา พร้อมรายละเอียดครบถ้วน
@@ -1306,8 +1350,9 @@ export function CalendarPage() {
                             className={`cursor-pointer rounded-xl border p-3 transition hover:shadow-2xs ${theme.bg} ${theme.border}`}
                           >
                             <div className="flex items-center justify-between gap-1">
-                              <Badge tone={theme.badgeTone}>
-                                {theme.icon} {theme.badgeText}
+                              <Badge tone={theme.badgeTone} className="inline-flex items-center gap-1">
+                                {theme.icon}
+                                <span>{theme.badgeText}</span>
                               </Badge>
                               <span className="font-mono text-xs font-bold text-ink">
                                 {ev.timeLabel}
@@ -1318,7 +1363,10 @@ export function CalendarPage() {
                               <p className="mt-0.5 text-xs text-ink-muted">{ev.subtitle}</p>
                             )}
                             {ev.location && (
-                              <p className="mt-0.5 text-xs text-ink-muted">📍 {ev.location}</p>
+                              <p className="mt-0.5 flex items-center gap-1 text-xs text-ink-muted">
+                                <IconMapPin className="h-3 w-3 shrink-0 text-accent-pink" />
+                                <span>{ev.location}</span>
+                              </p>
                             )}
                           </div>
                         )
@@ -1364,9 +1412,12 @@ export function CalendarPage() {
           >
             <div className="flex items-start justify-between gap-2 border-b border-line pb-3">
               <div>
-                <Badge tone={getItemTheme(selectedUnifiedEvent.type).badgeTone}>
-                  {getItemTheme(selectedUnifiedEvent.type).icon}{' '}
-                  {getItemTheme(selectedUnifiedEvent.type).badgeText}
+                <Badge
+                  tone={getItemTheme(selectedUnifiedEvent.type).badgeTone}
+                  className="inline-flex items-center gap-1"
+                >
+                  {getItemTheme(selectedUnifiedEvent.type).icon}
+                  <span>{getItemTheme(selectedUnifiedEvent.type).badgeText}</span>
                 </Badge>
                 <h3 className="mt-2 text-base font-bold text-ink">
                   {selectedUnifiedEvent.title}
@@ -1375,9 +1426,9 @@ export function CalendarPage() {
               <button
                 type="button"
                 onClick={() => setSelectedUnifiedEvent(null)}
-                className="rounded-lg px-2 py-1 text-xs font-bold text-ink-muted hover:bg-surface-alt"
+                className="rounded-lg p-1.5 text-ink-muted hover:bg-surface-alt hover:text-ink"
               >
-                ✕
+                <IconX className="h-4 w-4" />
               </button>
             </div>
 
@@ -1396,9 +1447,10 @@ export function CalendarPage() {
                 </div>
               )}
               {selectedUnifiedEvent.location && (
-                <div className="rounded-xl bg-surface-alt px-3 py-2">
+                <div className="flex items-center gap-1.5 rounded-xl bg-surface-alt px-3 py-2">
+                  <IconMapPin className="h-3.5 w-3.5 shrink-0 text-accent-pink" />
                   <span className="font-medium text-ink">
-                    📍 {selectedUnifiedEvent.location}
+                    {selectedUnifiedEvent.location}
                   </span>
                 </div>
               )}
@@ -1415,8 +1467,9 @@ export function CalendarPage() {
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 rounded-xl bg-accent-pink px-3 py-2 text-xs font-bold text-ink-inverted shadow-2xs hover:opacity-95"
                       >
-                        <span>🔗 Click online classes (Google Meet)</span>
-                        <span>↗</span>
+                        <IconVideo className="h-3.5 w-3.5 shrink-0" />
+                        <span>Click online classes (Google Meet)</span>
+                        <IconExternalLink className="h-3 w-3 opacity-70" />
                       </a>
                     )}
                     {selectedUnifiedEvent.rawClass.contact_url && (
@@ -1426,8 +1479,9 @@ export function CalendarPage() {
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 rounded-xl bg-status-success px-3 py-2 text-xs font-bold text-ink-inverted shadow-2xs hover:opacity-95"
                       >
-                        <span>💬 Contact (LINE กลุ่มอาจารย์)</span>
-                        <span>↗</span>
+                        <IconMessageCircle className="h-3.5 w-3.5 shrink-0" />
+                        <span>Contact (LINE กลุ่มอาจารย์)</span>
+                        <IconExternalLink className="h-3 w-3 opacity-70" />
                       </a>
                     )}
                   </div>
@@ -1457,7 +1511,8 @@ export function CalendarPage() {
                       })
                     }}
                   >
-                    🔄 ย้ายคาบ / งดคลาส
+                    <IconRefreshCw className="h-3.5 w-3.5 shrink-0 mr-1" />
+                    <span>ย้ายคาบ / งดคลาส</span>
                   </Button>
                 )}
               {selectedUnifiedEvent.type === 'class' && (

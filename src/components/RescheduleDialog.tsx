@@ -1,4 +1,11 @@
 import { useEffect, useState } from 'react'
+import {
+  IconPauseCircle,
+  IconPin,
+  IconRefreshCw,
+  IconRotateCcw,
+  IconX,
+} from './icons'
 import { dateKeyToDay } from '../lib/appointments'
 import { DAY_THAI_NAMES } from '../lib/reschedules'
 import { timeToMinutes } from '../lib/storage'
@@ -169,7 +176,10 @@ export default function RescheduleDialog({
         <div className="flex items-start justify-between gap-2 border-b border-line pb-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge tone="amber">🔄 ย้ายคาบเรียน / ปรับเวลา</Badge>
+              <Badge tone="amber" className="inline-flex items-center gap-1">
+                <IconRefreshCw className="h-3 w-3 shrink-0" />
+                <span>ย้ายคาบเรียน / ปรับเวลา</span>
+              </Badge>
               <span className="font-mono text-xs font-extrabold text-primary">
                 {session.course_code} (Sec {session.section})
               </span>
@@ -183,9 +193,9 @@ export default function RescheduleDialog({
             type="button"
             onClick={onClose}
             aria-label="ปิดหน้าต่าง"
-            className="min-h-[44px] min-w-[44px] rounded-xl border border-line bg-surface-alt px-3 text-sm font-bold text-ink hover:bg-surface-hover"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-line bg-surface-alt text-sm font-bold text-ink hover:bg-surface-hover"
           >
-            ✕
+            <IconX className="h-4 w-4" />
           </button>
         </div>
 
@@ -200,8 +210,11 @@ export default function RescheduleDialog({
           {session.rescheduledInfo && onRestoreOriginal && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-accent-amber bg-accent-amber-soft/70 p-3 text-xs">
               <div>
-                <p className="font-bold text-accent-amber-fg">
-                  🔄 คาบนี้ถูกย้ายชั่วคราวมาจากวัน{DAY_THAI_NAMES[session.rescheduledInfo.originalDay]} ({session.rescheduledInfo.originalStart}–{session.rescheduledInfo.originalEnd})
+                <p className="flex items-center gap-1.5 font-bold text-accent-amber-fg">
+                  <IconRefreshCw className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    คาบนี้ถูกย้ายชั่วคราวมาจากวัน{DAY_THAI_NAMES[session.rescheduledInfo.originalDay]} ({session.rescheduledInfo.originalStart}–{session.rescheduledInfo.originalEnd})
+                  </span>
                 </p>
                 {session.rescheduledInfo.reason && (
                   <p className="mt-0.5 text-ink-secondary">
@@ -215,7 +228,8 @@ export default function RescheduleDialog({
                 disabled={saving}
                 onClick={() => void handleRestore()}
               >
-                ↩️ คืนค่าคาบเดิม
+                <IconRotateCcw className="h-3.5 w-3.5 shrink-0 mr-1" />
+                <span>คืนค่าคาบเดิม</span>
               </Button>
             </div>
           )}
@@ -235,9 +249,12 @@ export default function RescheduleDialog({
                     : 'border-line bg-surface-alt text-ink-secondary hover:bg-surface-hover'
                 }`}
               >
-                <div className="font-bold text-primary">🔄 เฉพาะสัปดาห์นี้</div>
+                <div className="flex items-center gap-1.5 font-bold text-primary">
+                  <IconRefreshCw className="h-3.5 w-3.5 shrink-0" />
+                  <span>เฉพาะสัปดาห์นี้</span>
+                </div>
                 <p className="mt-0.5 text-[11px] text-ink-muted">
-                  ชดเชย/ย้ายเฉพาะวันที่เลือก (มีป้าย 🔄 ย้ายคาบ และกดคืนค่าเดิมได้)
+                  ชดเชย/ย้ายเฉพาะวันที่เลือก (มีป้ายย้ายคาบ และกดคืนค่าเดิมได้)
                 </p>
               </button>
 
@@ -250,7 +267,10 @@ export default function RescheduleDialog({
                     : 'border-line bg-surface-alt text-ink-secondary hover:bg-surface-hover'
                 }`}
               >
-                <div className="font-bold text-accent-mint-fg">📌 เปลี่ยนตารางหลักถาวร</div>
+                <div className="flex items-center gap-1.5 font-bold text-accent-mint-fg">
+                  <IconPin className="h-3.5 w-3.5 shrink-0" />
+                  <span>เปลี่ยนตารางหลักถาวร</span>
+                </div>
                 <p className="mt-0.5 text-[11px] text-ink-muted">
                   เปลี่ยนวัน/เวลาเรียนหลักของวิชานี้ในทุกสัปดาห์ตลอดเทอม
                 </p>
@@ -265,7 +285,10 @@ export default function RescheduleDialog({
                     : 'border-line bg-surface-alt text-ink-secondary hover:bg-surface-hover'
                 }`}
               >
-                <div className="font-bold text-status-danger">⏸️ งดคลาสในวันนี้</div>
+                <div className="flex items-center gap-1.5 font-bold text-status-danger">
+                  <IconPauseCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span>งดคลาสในวันนี้</span>
+                </div>
                 <p className="mt-0.5 text-[11px] text-ink-muted">
                   งดการเรียนการสอนในวันที่ {origDateVal} (สามารถกดคืนค่าทีหลังได้)
                 </p>

@@ -7,6 +7,29 @@ import {
   type TouchEvent as ReactTouchEvent,
 } from 'react'
 import { Link } from 'react-router-dom'
+import {
+  IconAlertTriangle,
+  IconBookOpen,
+  IconCheck,
+  IconClipboardList,
+  IconClock,
+  IconExternalLink,
+  IconEye,
+  IconFileText,
+  IconGraduationCap,
+  IconHourglass,
+  IconLink,
+  IconMapPin,
+  IconMessageCircle,
+  IconPencil,
+  IconPhone,
+  IconPlus,
+  IconTarget,
+  IconTrash,
+  IconVideo,
+  IconX,
+  IconZap,
+} from './icons'
 import PixelCat from './PixelCat'
 import { Badge, Button } from './ui'
 import {
@@ -45,22 +68,62 @@ const DAY_NAMES_THAI: Record<DayOfWeek, string> = {
 
 const LINK_TYPE_META: Record<
   CourseLinkType,
-  { icon: string; label: string; badgeTone: 'pink' | 'success' | 'sky' | 'amber' | 'primary' }
+  {
+    icon: (className?: string) => React.ReactNode
+    label: string
+    badgeTone: 'pink' | 'success' | 'sky' | 'amber' | 'primary'
+  }
 > = {
-  meet: { icon: '🎥', label: 'Google Meet / เรียนออนไลน์', badgeTone: 'pink' },
-  line: { icon: '💬', label: 'กลุ่ม LINE รายวิชา', badgeTone: 'success' },
-  contact: { icon: '📞', label: 'ช่องทางติดต่ออาจารย์/TA', badgeTone: 'sky' },
-  lms: { icon: '🎓', label: 'ระบบ LMS / เอกสารประกอบการเรียน', badgeTone: 'primary' },
-  other: { icon: '🔗', label: 'ลิงก์อื่นๆ', badgeTone: 'amber' },
+  meet: {
+    icon: (cls = 'h-3.5 w-3.5 shrink-0') => <IconVideo className={cls} />,
+    label: 'Google Meet / เรียนออนไลน์',
+    badgeTone: 'pink',
+  },
+  line: {
+    icon: (cls = 'h-3.5 w-3.5 shrink-0') => <IconMessageCircle className={cls} />,
+    label: 'กลุ่ม LINE รายวิชา',
+    badgeTone: 'success',
+  },
+  contact: {
+    icon: (cls = 'h-3.5 w-3.5 shrink-0') => <IconPhone className={cls} />,
+    label: 'ช่องทางติดต่ออาจารย์/TA',
+    badgeTone: 'sky',
+  },
+  lms: {
+    icon: (cls = 'h-3.5 w-3.5 shrink-0') => <IconGraduationCap className={cls} />,
+    label: 'ระบบ LMS / เอกสารประกอบการเรียน',
+    badgeTone: 'primary',
+  },
+  other: {
+    icon: (cls = 'h-3.5 w-3.5 shrink-0') => <IconLink className={cls} />,
+    label: 'ลิงก์อื่นๆ',
+    badgeTone: 'amber',
+  },
 }
 
 const TASK_STATUS_META: Record<
   TaskStatus,
-  { icon: string; label: string; tone: 'warning' | 'sky' | 'success' }
+  {
+    icon: (className?: string) => React.ReactNode
+    label: string
+    tone: 'warning' | 'sky' | 'success'
+  }
 > = {
-  todo: { icon: '⏳', label: 'รอดำเนินการ', tone: 'warning' },
-  in_progress: { icon: '⚡', label: 'กำลังทำ', tone: 'sky' },
-  done: { icon: '✓', label: 'เสร็จแล้ว', tone: 'success' },
+  todo: {
+    icon: (cls = 'h-3 w-3 shrink-0') => <IconHourglass className={cls} />,
+    label: 'รอดำเนินการ',
+    tone: 'warning',
+  },
+  in_progress: {
+    icon: (cls = 'h-3 w-3 shrink-0') => <IconZap className={cls} />,
+    label: 'กำลังทำ',
+    tone: 'sky',
+  },
+  done: {
+    icon: (cls = 'h-3 w-3 shrink-0') => <IconCheck className={cls} />,
+    label: 'เสร็จแล้ว',
+    tone: 'success',
+  },
 }
 
 export interface CourseDialogProps {
@@ -561,7 +624,10 @@ export function CourseDialog({
                 <Badge tone="neutral">กลุ่มเรียน {primarySession.section}</Badge>
                 <Badge tone="amber">{semesterLabel}</Badge>
                 {isReadOnlyViewer && (
-                  <Badge tone="warning">👁️ โหมดดูอย่างเดียว</Badge>
+                  <Badge tone="warning" className="inline-flex items-center gap-1">
+                    <IconEye className="h-3 w-3 shrink-0" />
+                    <span>โหมดดูอย่างเดียว</span>
+                  </Badge>
                 )}
               </div>
 
@@ -580,7 +646,7 @@ export function CourseDialog({
               aria-label="ปิดหน้าต่างรายละเอียดวิชา"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-line bg-surface-alt text-sm font-bold text-ink-secondary transition hover:bg-surface-hover hover:text-ink"
             >
-              ✕
+              <IconX className="h-4 w-4" />
             </button>
           </div>
 
@@ -598,7 +664,8 @@ export function CourseDialog({
                     }
                     className="inline-flex items-center gap-1 rounded-xl border border-primary/40 bg-primary-soft px-2.5 py-1.5 text-xs font-bold text-primary transition hover:bg-primary hover:text-ink-inverted"
                   >
-                    <span>+ เพิ่มงานวิชานี้</span>
+                    <IconPlus className="h-3 w-3 shrink-0" />
+                    <span>เพิ่มงานวิชานี้</span>
                   </button>
                   <button
                     type="button"
@@ -607,7 +674,8 @@ export function CourseDialog({
                     }
                     className="inline-flex items-center gap-1 rounded-xl border border-accent-pink/40 bg-accent-pink-soft px-2.5 py-1.5 text-xs font-bold text-accent-pink-fg transition hover:bg-accent-pink hover:text-ink-inverted"
                   >
-                    <span>🎯 + เพิ่มสอบ</span>
+                    <IconTarget className="h-3.5 w-3.5 shrink-0" />
+                    <span>+ เพิ่มสอบ</span>
                   </button>
                 </>
               )}
@@ -617,7 +685,8 @@ export function CourseDialog({
                   to={`/chat?course=${encodeURIComponent(primarySession.course_code)}`}
                   className="inline-flex items-center gap-1 rounded-xl border border-line-strong bg-surface-alt px-2.5 py-1.5 text-xs font-bold text-ink-secondary transition hover:bg-surface-hover hover:text-ink"
                 >
-                  <span>💬 ห้องแชทวิชา</span>
+                  <IconMessageCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span>ห้องแชทวิชา</span>
                 </Link>
               )}
             </div>
@@ -629,13 +698,23 @@ export function CourseDialog({
                   setIsEditingDetails((prev) => !prev)
                   setLinkValidationError(null)
                 }}
-                className={`inline-flex items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-bold transition ${
+                className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition ${
                   isEditingDetails
                     ? 'border-status-warning bg-status-warning-soft text-status-warning-fg'
                     : 'border-line-strong bg-surface-alt text-ink hover:bg-surface-hover'
                 }`}
               >
-                <span>{isEditingDetails ? '✕ ปิดโหมดแก้ไข' : '✏️ แก้ไขสี/ลิงก์/โน้ต'}</span>
+                {isEditingDetails ? (
+                  <>
+                    <IconX className="h-3.5 w-3.5 shrink-0" />
+                    <span>ปิดโหมดแก้ไข</span>
+                  </>
+                ) : (
+                  <>
+                    <IconPencil className="h-3.5 w-3.5 shrink-0" />
+                    <span>แก้ไขสี/ลิงก์/โน้ต</span>
+                  </>
+                )}
               </button>
             )}
           </div>
@@ -646,18 +725,20 @@ export function CourseDialog({
           {feedbackToast && (
             <div
               role="status"
-              className="rounded-xl border border-status-success bg-status-success-soft px-3.5 py-2 text-xs font-bold text-status-success-fg"
+              className="flex items-center gap-1.5 rounded-xl border border-status-success bg-status-success-soft px-3.5 py-2 text-xs font-bold text-status-success-fg"
             >
-              ✓ {feedbackToast}
+              <IconCheck className="h-4 w-4 shrink-0 text-status-success-fg" />
+              <span>{feedbackToast}</span>
             </div>
           )}
 
           {linkValidationError && (
             <div
               role="alert"
-              className="rounded-xl border border-status-danger bg-status-danger-soft px-3.5 py-2.5 text-xs font-bold text-status-danger-fg"
+              className="flex items-center gap-1.5 rounded-xl border border-status-danger bg-status-danger-soft px-3.5 py-2.5 text-xs font-bold text-status-danger-fg"
             >
-              ⚠️ {linkValidationError}
+              <IconAlertTriangle className="h-4 w-4 shrink-0 text-status-danger-fg" />
+              <span>{linkValidationError}</span>
             </div>
           )}
 
@@ -669,9 +750,17 @@ export function CourseDialog({
             >
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-extrabold uppercase tracking-wider text-primary">
-                  {quickAddMode === 'exam'
-                    ? `🎯 เพิ่มตารางสอบวิชา ${primarySession.course_code}`
-                    : `📘 เพิ่มงาน/การบ้านวิชา ${primarySession.course_code}`}
+                  {quickAddMode === 'exam' ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <IconTarget className="h-3.5 w-3.5 shrink-0" />
+                      <span>เพิ่มตารางสอบวิชา {primarySession.course_code}</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5">
+                      <IconFileText className="h-3.5 w-3.5 shrink-0" />
+                      <span>เพิ่มงาน/การบ้านวิชา {primarySession.course_code}</span>
+                    </span>
+                  )}
                 </h3>
                 <button
                   type="button"
@@ -788,8 +877,9 @@ export function CourseDialog({
               onSubmit={(e) => void handleSubmitCourseDetails(e)}
               className="space-y-4 rounded-2xl border-2 border-primary bg-surface-alt p-4"
             >
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-primary">
-                ✏️ แก้ไขสีวิชา ลิงก์ ห้องเรียนเต็ม และโน้ต
+              <h3 className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-primary">
+                <IconPencil className="h-3.5 w-3.5 shrink-0" />
+                <span>แก้ไขสีวิชา ลิงก์ ห้องเรียนเต็ม และโน้ต</span>
               </h3>
 
               {/* 1) เลือกสีประจำวิชา */}
@@ -814,7 +904,7 @@ export function CourseDialog({
                         <span
                           className={`flex h-6 w-6 items-center justify-center rounded-full ${swatch.swatchBg} text-xs text-ink-inverted font-extrabold`}
                         >
-                          {isSelected ? '✓' : ''}
+                          {isSelected ? <IconCheck className="h-3 w-3" /> : ''}
                         </span>
                         <span className="truncate text-ink">{swatch.label}</span>
                       </button>
@@ -861,11 +951,11 @@ export function CourseDialog({
                           aria-label="ประเภทลิงก์"
                           className="rounded-lg border border-line-strong bg-surface-alt px-2 py-1.5 text-xs text-ink sm:col-span-3"
                         >
-                          <option value="meet">🎥 Meet</option>
-                          <option value="line">💬 LINE</option>
-                          <option value="contact">📞 ติดต่อ</option>
-                          <option value="lms">🎓 LMS</option>
-                          <option value="other">🔗 อื่นๆ</option>
+                          <option value="meet">Meet</option>
+                          <option value="line">LINE</option>
+                          <option value="contact">ติดต่อ</option>
+                          <option value="lms">LMS</option>
+                          <option value="other">อื่นๆ</option>
                         </select>
                         <input
                           type="text"
@@ -888,10 +978,10 @@ export function CourseDialog({
                         <button
                           type="button"
                           onClick={() => handleRemoveDraftLink(idx)}
-                          className="rounded-lg bg-status-danger-soft px-2 py-1.5 text-xs font-bold text-status-danger hover:opacity-90 sm:col-span-1"
+                          className="flex items-center justify-center rounded-lg bg-status-danger-soft px-2 py-1.5 text-xs font-bold text-status-danger hover:opacity-90 sm:col-span-1"
                           title="ลบลิงก์นี้"
                         >
-                          🗑️
+                          <IconTrash className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     ))}
@@ -912,11 +1002,11 @@ export function CourseDialog({
                       aria-label="ประเภทลิงก์ใหม่"
                       className="rounded-lg border border-line-strong bg-surface-alt px-2 py-1.5 text-xs text-ink sm:col-span-3"
                     >
-                      <option value="meet">🎥 Meet</option>
-                      <option value="line">💬 LINE</option>
-                      <option value="contact">📞 ติดต่อ</option>
-                      <option value="lms">🎓 LMS</option>
-                      <option value="other">🔗 อื่นๆ</option>
+                      <option value="meet">Meet</option>
+                      <option value="line">LINE</option>
+                      <option value="contact">ติดต่อ</option>
+                      <option value="lms">LMS</option>
+                      <option value="other">อื่นๆ</option>
                     </select>
                     <input
                       type="text"
@@ -981,13 +1071,20 @@ export function CourseDialog({
           {/* 1. ข้อมูลคาบเรียน และ คาบถัดไป */}
           <section className="rounded-2xl border border-line bg-surface-alt/70 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-ink-muted">
-                🕒 ข้อมูลคาบเรียนและสถานที่
+              <h3 className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-ink-muted">
+                <IconClock className="h-4 w-4 shrink-0 text-primary" />
+                <span>ข้อมูลคาบเรียนและสถานที่</span>
               </h3>
               {primarySession.online_link ? (
-                <Badge tone="mint">🌐 มีเรียนออนไลน์</Badge>
+                <Badge tone="mint" className="inline-flex items-center gap-1">
+                  <IconVideo className="h-3 w-3 shrink-0" />
+                  <span>มีเรียนออนไลน์</span>
+                </Badge>
               ) : (
-                <Badge tone="neutral">🏫 เรียนในห้องเรียน</Badge>
+                <Badge tone="neutral" className="inline-flex items-center gap-1">
+                  <IconMapPin className="h-3 w-3 shrink-0" />
+                  <span>เรียนในห้องเรียน</span>
+                </Badge>
               )}
             </div>
 
@@ -1011,9 +1108,10 @@ export function CourseDialog({
               {/* คาบถัดไป (วันที่ + นับถอยหลังแบบไทย) */}
               {nextSessionInfo && (
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary-soft/40 px-3 py-2">
-                  <div>
+                  <div className="flex items-center gap-1">
+                    <IconHourglass className="h-3.5 w-3.5 text-ink-secondary shrink-0" />
                     <span className="text-[11px] font-bold text-ink-secondary">
-                      ⏳ คาบถัดไป:
+                      คาบถัดไป:
                     </span>{' '}
                     <span className="font-bold text-ink">
                       {nextSessionInfo.dateLabelThai}
@@ -1029,8 +1127,9 @@ export function CourseDialog({
               <div className="flex items-start gap-2">
                 <span className="shrink-0 font-semibold text-ink-muted">ห้องเรียน:</span>
                 <div className="font-bold text-ink">
-                  <span className="font-mono text-primary">
-                    📍 {primarySession.room || '-'}
+                  <span className="inline-flex items-center gap-1 font-mono text-primary">
+                    <IconMapPin className="h-3 w-3 shrink-0 text-accent-pink" />
+                    <span>{primarySession.room || '-'}</span>
                   </span>{' '}
                   <span className="font-medium text-ink-secondary">
                     ({fullLocationText})
@@ -1056,8 +1155,9 @@ export function CourseDialog({
           {!isSharedAnonView && (
             <section className="space-y-2.5">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-ink-muted">
-                  🔗 ลิงก์เข้าเรียนและช่องทางติดต่อ ({activeLinks.length})
+                <h3 className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-ink-muted">
+                  <IconLink className="h-4 w-4 shrink-0 text-primary" />
+                  <span>ลิงก์เข้าเรียนและช่องทางติดต่อ ({activeLinks.length})</span>
                 </h3>
               </div>
 
@@ -1076,8 +1176,9 @@ export function CourseDialog({
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <Badge tone={meta.badgeTone}>
-                              {meta.icon} {lnk.label || meta.label}
+                            <Badge tone={meta.badgeTone} className="inline-flex items-center gap-1">
+                              {meta.icon('h-3.5 w-3.5 shrink-0')}
+                              <span>{lnk.label || meta.label}</span>
                             </Badge>
                           </div>
                           <p className="mt-1 truncate font-mono text-[11px] text-ink-muted">
@@ -1093,14 +1194,15 @@ export function CourseDialog({
                             className="inline-flex items-center gap-1 rounded-xl bg-primary px-3 py-1.5 text-xs font-bold text-ink-inverted shadow-2xs transition hover:bg-primary-hover"
                           >
                             <span>เปิดลิงก์</span>
-                            <span>↗</span>
+                            <IconExternalLink className="h-3 w-3 opacity-70" />
                           </a>
                           <button
                             type="button"
                             onClick={() => void handleCopyUrl(lnk.url, lnk.label)}
                             className="inline-flex items-center gap-1 rounded-xl border border-line-strong bg-surface px-2.5 py-1.5 text-xs font-bold text-ink-secondary transition hover:bg-surface-hover hover:text-ink"
                           >
-                            <span>📋 คัดลอก</span>
+                            <IconClipboardList className="h-3.5 w-3.5 shrink-0" />
+                            <span>คัดลอก</span>
                           </button>
                         </div>
                       </div>
@@ -1114,8 +1216,9 @@ export function CourseDialog({
           {/* 3. งานค้างของวิชานี้ (เรียงตามกำหนดส่ง ป้ายสถานะ ผู้รับผิดชอบ นับถอยหลัง ติ๊กเสร็จได้) */}
           <section className="space-y-2.5">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-ink-muted">
-                📝 งานค้างของวิชานี้ ({pendingHomeworkTasks.length} งานค้าง)
+              <h3 className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-ink-muted">
+                <IconFileText className="h-4 w-4 shrink-0 text-accent-amber-fg" />
+                <span>งานค้างของวิชานี้ ({pendingHomeworkTasks.length} งานค้าง)</span>
               </h3>
               {!isSharedAnonView && (
                 <Link
@@ -1161,8 +1264,8 @@ export function CourseDialog({
                         )}
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <Badge tone={statusMeta.tone}>
-                              <span>{statusMeta.icon}</span>
+                            <Badge tone={statusMeta.tone} className="inline-flex items-center gap-1">
+                              {statusMeta.icon('h-3 w-3 shrink-0')}
                               <span>{statusMeta.label}</span>
                             </Badge>
                             <Badge
@@ -1173,8 +1276,10 @@ export function CourseDialog({
                                     ? 'warning'
                                     : 'neutral'
                               }
+                              className="inline-flex items-center gap-1"
                             >
-                              ⏰ {countdown.text}
+                              <IconClock className="h-3 w-3 shrink-0" />
+                              <span>{countdown.text}</span>
                             </Badge>
                           </div>
 
@@ -1201,7 +1306,8 @@ export function CourseDialog({
                           disabled={togglingTaskId === task.id}
                           onClick={() => void handleToggleTaskClick(task)}
                         >
-                          ✓ เสร็จ
+                          <IconCheck className="h-3.5 w-3.5 shrink-0 mr-1" />
+                          <span>เสร็จ</span>
                         </Button>
                       )}
                     </div>
@@ -1214,8 +1320,9 @@ export function CourseDialog({
           {/* 4. สอบของวิชานี้ (วัน เวลา ห้อง หัวข้อ นับถอยหลัง) */}
           <section className="space-y-2.5">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-ink-muted">
-                🎯 ตารางสอบของวิชานี้ ({courseExams.length})
+              <h3 className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-ink-muted">
+                <IconTarget className="h-4 w-4 shrink-0 text-accent-pink" />
+                <span>ตารางสอบของวิชานี้ ({courseExams.length})</span>
               </h3>
             </div>
 
@@ -1249,8 +1356,9 @@ export function CourseDialog({
                       className="rounded-2xl border border-accent-pink/40 bg-accent-pink-soft/40 p-3.5 text-xs"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-bold text-ink text-sm">
-                          🎯 {exam.title}
+                        <span className="flex items-center gap-1.5 font-bold text-ink text-sm">
+                          <IconTarget className="h-4 w-4 shrink-0 text-accent-pink" />
+                          <span>{exam.title}</span>
                         </span>
                         <Badge
                           tone={
@@ -1260,8 +1368,10 @@ export function CourseDialog({
                                 ? 'warning'
                                 : 'pink'
                           }
+                          className="inline-flex items-center gap-1"
                         >
-                          ⏳ {countdown.text}
+                          <IconHourglass className="h-3 w-3 shrink-0" />
+                          <span>{countdown.text}</span>
                         </Badge>
                       </div>
 
@@ -1295,8 +1405,9 @@ export function CourseDialog({
           {/* 5. โน้ตของวิชา (ซ่อนอัตโนมัติในลิงก์แชร์สาธารณะซึ่ง DB ไม่ส่งค่ามา) */}
           {!isSharedAnonView && (
             <section className="space-y-2">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-ink-muted">
-                📒 โน้ตของวิชา
+              <h3 className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-ink-muted">
+                <IconBookOpen className="h-4 w-4 shrink-0 text-primary" />
+                <span>โน้ตของวิชา</span>
               </h3>
               <div className="rounded-2xl border border-line bg-surface-alt/60 p-3.5 text-xs text-ink whitespace-pre-wrap leading-relaxed">
                 {primarySession.notes && primarySession.notes.trim().length > 0

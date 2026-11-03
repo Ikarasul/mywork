@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
+  IconBookOpen,
+  IconCalendar,
+  IconCheck,
+  IconClock,
+  IconEye,
+  IconFileText,
+  IconHourglass,
+  IconMapPin,
+  IconTarget,
+  IconZap,
+} from '../components/icons'
+import {
   Badge,
   Button,
   Card,
@@ -16,20 +28,52 @@ import type { TaskItem, TaskStatus, TaskType } from '../types'
 
 const TASK_TYPE_META: Record<
   TaskType,
-  { icon: string; label: string; tone: 'sky' | 'primary' | 'pink' }
+  {
+    icon: (className?: string) => React.ReactNode
+    label: string
+    tone: 'sky' | 'primary' | 'pink'
+  }
 > = {
-  homework: { icon: '📘', label: 'การบ้าน', tone: 'sky' },
-  work: { icon: '🛠️', label: 'งานกลุ่ม/โปรเจกต์', tone: 'primary' },
-  exam: { icon: '🎯', label: 'สอบ', tone: 'pink' },
+  homework: {
+    icon: (cls = 'h-3.5 w-3.5 shrink-0') => <IconFileText className={cls} />,
+    label: 'การบ้าน',
+    tone: 'sky',
+  },
+  work: {
+    icon: (cls = 'h-3.5 w-3.5 shrink-0') => <IconBookOpen className={cls} />,
+    label: 'งานกลุ่ม/โปรเจกต์',
+    tone: 'primary',
+  },
+  exam: {
+    icon: (cls = 'h-3.5 w-3.5 shrink-0') => <IconTarget className={cls} />,
+    label: 'สอบ',
+    tone: 'pink',
+  },
 }
 
 const STATUS_META: Record<
   TaskStatus,
-  { icon: string; label: string; tone: 'warning' | 'sky' | 'success' }
+  {
+    icon: (className?: string) => React.ReactNode
+    label: string
+    tone: 'warning' | 'sky' | 'success'
+  }
 > = {
-  todo: { icon: '⏳', label: 'รอดำเนินการ', tone: 'warning' },
-  in_progress: { icon: '⚡', label: 'กำลังทำ', tone: 'sky' },
-  done: { icon: '✓', label: 'เสร็จแล้ว', tone: 'success' },
+  todo: {
+    icon: (cls = 'h-3 w-3 shrink-0') => <IconHourglass className={cls} />,
+    label: 'รอดำเนินการ',
+    tone: 'warning',
+  },
+  in_progress: {
+    icon: (cls = 'h-3 w-3 shrink-0') => <IconZap className={cls} />,
+    label: 'กำลังทำ',
+    tone: 'sky',
+  },
+  done: {
+    icon: (cls = 'h-3 w-3 shrink-0') => <IconCheck className={cls} />,
+    label: 'เสร็จแล้ว',
+    tone: 'success',
+  },
 }
 
 export function TasksPage() {
@@ -292,7 +336,12 @@ export function TasksPage() {
               {filterCourseParam && (
                 <Badge tone="primary">กรองวิชา: {filterCourseParam}</Badge>
               )}
-              {isLoggedInViewer && <Badge tone="warning">👁️ โหมดดูอย่างเดียว</Badge>}
+              {isLoggedInViewer && (
+                <Badge tone="warning" className="inline-flex items-center gap-1">
+                  <IconEye className="h-3 w-3 shrink-0" />
+                  <span>โหมดดูอย่างเดียว</span>
+                </Badge>
+              )}
             </div>
             <p className="mt-1 text-xs text-ink-muted sm:text-sm">
               ติดตามงานที่ได้รับมอบหมาย กำหนดส่งแบบไทย (พ.ศ.) ห้องสอบ และผู้รับผิดชอบต่องาน
@@ -379,9 +428,9 @@ export function TasksPage() {
                   onChange={(e) => setTaskType(e.target.value as TaskType)}
                   className="mt-1 min-h-[44px] sm:min-h-[38px] w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink"
                 >
-                  <option value="homework">📘 การบ้าน</option>
-                  <option value="work">🛠️ งานกลุ่ม/โปรเจกต์</option>
-                  <option value="exam">🎯 สอบ</option>
+                  <option value="homework">การบ้าน</option>
+                  <option value="work">งานกลุ่ม/โปรเจกต์</option>
+                  <option value="exam">สอบ</option>
                 </select>
               </div>
 
@@ -439,8 +488,9 @@ export function TasksPage() {
             {taskType === 'exam' && (
               <div className="grid gap-3 rounded-xl border border-accent-pink/50 bg-accent-pink-soft/20 p-3 sm:grid-cols-3">
                 <div>
-                  <label className="block text-xs font-semibold text-accent-pink-fg">
-                    📍 ห้องสอบ (exam_room)
+                  <label className="flex items-center gap-1 text-xs font-semibold text-accent-pink-fg">
+                    <IconMapPin className="h-3 w-3 shrink-0" />
+                    <span>ห้องสอบ (exam_room)</span>
                   </label>
                   <input
                     type="text"
@@ -451,8 +501,9 @@ export function TasksPage() {
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-accent-pink-fg">
-                    📖 หัวข้อที่ออกสอบ (exam_topics)
+                  <label className="flex items-center gap-1 text-xs font-semibold text-accent-pink-fg">
+                    <IconBookOpen className="h-3 w-3 shrink-0" />
+                    <span>หัวข้อที่ออกสอบ (exam_topics)</span>
                   </label>
                   <input
                     type="text"
@@ -541,12 +592,12 @@ export function TasksPage() {
                 >
                   <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone={typeMeta.tone}>
-                        <span>{typeMeta.icon}</span>
+                      <Badge tone={typeMeta.tone} className="inline-flex items-center gap-1">
+                        {typeMeta.icon('h-3.5 w-3.5 shrink-0')}
                         <span>{typeMeta.label}</span>
                       </Badge>
-                      <Badge tone={statusMeta.tone}>
-                        <span>{statusMeta.icon}</span>
+                      <Badge tone={statusMeta.tone} className="inline-flex items-center gap-1">
+                        {statusMeta.icon('h-3 w-3 shrink-0')}
                         <span>{statusMeta.label}</span>
                       </Badge>
                       {t.due_date && t.status !== 'done' && (
@@ -558,8 +609,10 @@ export function TasksPage() {
                                 ? 'warning'
                                 : 'sky'
                           }
+                          className="inline-flex items-center gap-1"
                         >
-                          ⏰ {countdown.text}
+                          <IconClock className="h-3 w-3 shrink-0" />
+                          <span>{countdown.text}</span>
                         </Badge>
                       )}
                       {t.course_code && (
@@ -581,29 +634,29 @@ export function TasksPage() {
                     {t.task_type === 'exam' && (t.exam_room || t.exam_topics) && (
                       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs">
                         {t.exam_room && (
-                          <span className="font-semibold text-ink">
-                            📍 ห้องสอบ: <span className="text-primary">{t.exam_room}</span>
+                          <span className="flex items-center gap-1 font-semibold text-ink">
+                            <IconMapPin className="h-3 w-3 shrink-0 text-accent-pink" />
+                            <span>ห้องสอบ: <span className="text-primary">{t.exam_room}</span></span>
                           </span>
                         )}
                         {t.exam_topics && (
-                          <span className="text-ink-secondary">
-                            📖 หัวข้อสอบ: <strong>{t.exam_topics}</strong>
+                          <span className="flex items-center gap-1 text-ink-secondary">
+                            <IconBookOpen className="h-3 w-3 shrink-0 text-accent-pink" />
+                            <span>หัวข้อสอบ: <strong>{t.exam_topics}</strong></span>
                           </span>
                         )}
                       </div>
                     )}
 
                     <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-ink-muted">
-                      <span>
-                        📅 กำหนดส่ง:{' '}
-                        <strong className="text-ink-secondary">
-                          {formatDateTimeThai(t.due_date)}
-                        </strong>
+                      <span className="flex items-center gap-1">
+                        <IconCalendar className="h-3 w-3 shrink-0 text-ink-muted" />
+                        <span>กำหนดส่ง: <strong className="text-ink-secondary">{formatDateTimeThai(t.due_date)}</strong></span>
                       </span>
 
                       {t.assignee_ids && t.assignee_ids.length > 0 && (
                         <span>
-                          👤 ผู้รับผิดชอบ:{' '}
+                          ผู้รับผิดชอบ:{' '}
                           <strong className="text-ink-secondary">
                             {t.assignee_ids
                               .map((uid) => memberNameMap.get(uid) ?? 'สมาชิก')
@@ -624,9 +677,9 @@ export function TasksPage() {
                         }
                         className="min-h-[44px] sm:min-h-[36px] rounded-xl border border-line-strong bg-surface px-3 py-1.5 text-xs font-semibold text-ink"
                       >
-                        <option value="todo">⏳ รอดำเนินการ</option>
-                        <option value="in_progress">⚡ กำลังทำ</option>
-                        <option value="done">✓ เสร็จแล้ว</option>
+                        <option value="todo">รอดำเนินการ</option>
+                        <option value="in_progress">กำลังทำ</option>
+                        <option value="done">เสร็จแล้ว</option>
                       </select>
                     )}
 

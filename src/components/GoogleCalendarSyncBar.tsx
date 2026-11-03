@@ -1,3 +1,4 @@
+import { IconCalendarDays, IconRefreshCw, IconX } from './icons'
 import { Badge, Button, Toast } from './ui'
 import { formatDateTimeThai } from '../lib/dateThai'
 import { isSupabaseConfigured } from '../lib/supabase'
@@ -47,8 +48,9 @@ export function GoogleCalendarSyncBar({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-extrabold text-ink sm:text-sm">
-              📆 ซิงก์ปฏิทิน Google Calendar (อ่านอย่างเดียว)
+            <span className="flex items-center gap-1.5 text-xs font-extrabold text-ink sm:text-sm">
+              <IconCalendarDays className="h-4 w-4 text-accent-sky-fg" />
+              <span>ซิงก์ปฏิทิน Google Calendar (อ่านอย่างเดียว)</span>
             </span>
             <Badge tone={lastSyncedAt ? 'sky' : 'neutral'}>
               {lastSyncedAt ? `${eventsCount} อีเวนต์สัปดาห์นี้` : 'ยังไม่ได้ซิงก์'}
@@ -81,7 +83,14 @@ export function GoogleCalendarSyncBar({
             disabled={syncing || !isSupabaseConfigured}
             onClick={onSyncNow}
           >
-            {syncing ? 'กำลังซิงก์ Google Calendar...' : '🔄 ซิงก์ Google Calendar'}
+            {syncing ? (
+              'กำลังซิงก์ Google Calendar...'
+            ) : (
+              <span className="inline-flex items-center gap-1">
+                <IconRefreshCw className="h-3.5 w-3.5 shrink-0" />
+                <span>ซิงก์ Google Calendar</span>
+              </span>
+            )}
           </Button>
 
           {lastSyncedAt && (
@@ -137,7 +146,10 @@ export function GoogleCalendarEventModal({
         <div className="flex items-start justify-between gap-2 border-b border-line pb-3">
           <div>
             <div className="flex flex-wrap items-center gap-1.5">
-              <Badge tone="sky">📆 Google Calendar</Badge>
+              <Badge tone="sky" className="inline-flex items-center gap-1">
+                <IconCalendarDays className="h-3 w-3 shrink-0" />
+                <span>Google Calendar</span>
+              </Badge>
               <Badge tone="neutral">อ่านอย่างเดียว</Badge>
             </div>
             <h3 className="mt-2 text-base font-bold text-ink">{event.summary}</h3>
@@ -145,9 +157,9 @@ export function GoogleCalendarEventModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg px-2 py-1 text-xs font-bold text-ink-muted hover:bg-surface-alt hover:text-ink"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted hover:bg-surface-alt hover:text-ink"
           >
-            ✕
+            <IconX className="h-4 w-4" />
           </button>
         </div>
 

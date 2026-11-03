@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import GoogleCalendarSyncBar, {
   GoogleCalendarEventModal,
 } from '../components/GoogleCalendarSyncBar'
+import { IconCalendarDays } from '../components/icons'
 import {
   Badge,
   Button,
@@ -387,7 +388,10 @@ export function LifeSchedulePage() {
                     <span className="font-mono text-xs font-bold text-accent-sky-fg">
                       {ev.isAllDay ? 'ตลอดทั้งวัน' : `${ev.startTime} – ${ev.endTime}`}
                     </span>
-                    <Badge tone="sky">📆 Google Calendar</Badge>
+                    <Badge tone="sky" className="inline-flex items-center gap-1">
+                      <IconCalendarDays className="h-3 w-3 shrink-0" />
+                      <span>Google Calendar</span>
+                    </Badge>
                   </div>
                   <p className="mt-1 text-sm font-bold text-ink">{ev.summary}</p>
                   <div className="mt-1.5 flex items-center justify-between text-xs">
@@ -449,8 +453,9 @@ export function LifeSchedulePage() {
                         onClick={() => setSelectedGcalEvent(ev)}
                         className="cursor-pointer rounded-lg border border-dashed border-accent-sky bg-accent-sky-soft/75 p-2 text-xs text-accent-sky-fg"
                       >
-                        <div className="font-mono text-[10px] font-bold">
-                          📆 {ev.isAllDay ? 'ทั้งวัน' : `${ev.startTime}–${ev.endTime}`}
+                        <div className="flex items-center gap-1 font-mono text-[10px] font-bold">
+                          <IconCalendarDays className="h-3 w-3 shrink-0" />
+                          <span>{ev.isAllDay ? 'ทั้งวัน' : `${ev.startTime}–${ev.endTime}`}</span>
                         </div>
                         <div className="font-bold text-ink">{ev.summary}</div>
                       </div>
@@ -502,8 +507,9 @@ export function LifeSchedulePage() {
                         onClick={() => setSelectedGcalEvent(ev)}
                         className="cursor-pointer rounded-lg border border-dashed border-accent-sky bg-accent-sky-soft/75 p-2 text-xs text-accent-sky-fg"
                       >
-                        <div className="font-mono text-[10px] font-bold">
-                          📆 {ev.isAllDay ? 'ทั้งวัน' : `${ev.startTime}–${ev.endTime}`}
+                        <div className="flex items-center gap-1 font-mono text-[10px] font-bold">
+                          <IconCalendarDays className="h-3 w-3 shrink-0" />
+                          <span>{ev.isAllDay ? 'ทั้งวัน' : `${ev.startTime}–${ev.endTime}`}</span>
                         </div>
                         <div className="font-bold text-ink">{ev.summary}</div>
                       </div>

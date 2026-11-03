@@ -1,4 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import {
+  IconAlertTriangle,
+  IconEye,
+  IconHandshake,
+  IconTrash,
+  IconX,
+} from './icons'
 import { Badge, Button } from './ui'
 import { formatFullDateThai } from '../lib/dateThai'
 import type { AppointmentInput } from '../lib/appointments'
@@ -143,8 +150,16 @@ export function AppointmentDialog({
         <div className="flex items-start justify-between gap-2 border-b border-line pb-3">
           <div>
             <div className="flex flex-wrap items-center gap-1.5">
-              <Badge tone="amber">🤝 นัดหมาย</Badge>
-              {readOnly && <Badge tone="warning">👁️ โหมดดูอย่างเดียว</Badge>}
+              <Badge tone="amber" className="inline-flex items-center gap-1">
+                <IconHandshake className="h-3 w-3 shrink-0" />
+                <span>นัดหมาย</span>
+              </Badge>
+              {readOnly && (
+                <Badge tone="warning" className="inline-flex items-center gap-1">
+                  <IconEye className="h-3 w-3 shrink-0" />
+                  <span>โหมดดูอย่างเดียว</span>
+                </Badge>
+              )}
             </div>
             <h2 id="appt-dialog-title" className="mt-2 text-base font-bold text-ink">
               {readOnly ? 'รายละเอียดนัด' : isEdit ? 'แก้ไขนัด' : 'เพิ่มนัดใหม่'}
@@ -156,7 +171,7 @@ export function AppointmentDialog({
             aria-label="ปิดหน้าต่าง"
             className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-sm font-bold text-ink-muted hover:bg-surface-alt hover:text-ink"
           >
-            ✕
+            <IconX className="h-4 w-4" />
           </button>
         </div>
 
@@ -298,9 +313,10 @@ export function AppointmentDialog({
           {errorText && (
             <div
               role="alert"
-              className="rounded-xl border border-status-danger bg-status-danger-soft p-3 text-xs font-medium text-status-danger-fg"
+              className="flex items-center gap-1.5 rounded-xl border border-status-danger bg-status-danger-soft p-3 text-xs font-medium text-status-danger-fg"
             >
-              ⚠️ {errorText}
+              <IconAlertTriangle className="h-4 w-4 shrink-0" />
+              <span>{errorText}</span>
             </div>
           )}
 
@@ -323,7 +339,8 @@ export function AppointmentDialog({
                   </div>
                 ) : (
                   <Button variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>
-                    🗑️ ลบนัด
+                    <IconTrash className="h-3.5 w-3.5 shrink-0 mr-1" />
+                    <span>ลบนัด</span>
                   </Button>
                 )
               )}

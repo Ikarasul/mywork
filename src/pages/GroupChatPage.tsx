@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
+  IconEye,
+  IconMessageCircle,
+  IconPin,
+} from '../components/icons'
+import {
   Badge,
   Button,
   Card,
@@ -170,9 +175,17 @@ export function GroupChatPage() {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold text-ink sm:text-2xl">แชทกลุ่ม</h1>
               {courseTagParam && (
-                <Badge tone="primary">💬 ห้องแชทวิชา #{courseTagParam}</Badge>
+                <Badge tone="primary" className="inline-flex items-center gap-1">
+                  <IconMessageCircle className="h-3 w-3 shrink-0" />
+                  <span>ห้องแชทวิชา #{courseTagParam}</span>
+                </Badge>
               )}
-              {isLoggedInViewer && <Badge tone="warning">👁️ โหมดดูอย่างเดียว</Badge>}
+              {isLoggedInViewer && (
+                <Badge tone="warning" className="inline-flex items-center gap-1">
+                  <IconEye className="h-3 w-3 shrink-0" />
+                  <span>โหมดดูอย่างเดียว</span>
+                </Badge>
+              )}
             </div>
             <p className="mt-1 text-xs text-ink-muted sm:text-sm">
               {activeGroup
@@ -239,8 +252,9 @@ export function GroupChatPage() {
         {/* ส่วนข้อความที่ปักหมุด */}
         {pinnedMessages.length > 0 && (
           <div className="mt-4 rounded-xl border border-accent-amber bg-accent-amber-soft/50 p-3.5">
-            <h2 className="text-xs font-bold text-accent-amber-fg uppercase">
-              📌 ข้อความที่ปักหมุดไว้ ({pinnedMessages.length})
+            <h2 className="flex items-center gap-1.5 text-xs font-bold text-accent-amber-fg uppercase">
+              <IconPin className="h-3.5 w-3.5 shrink-0" />
+              <span>ข้อความที่ปักหมุดไว้ ({pinnedMessages.length})</span>
             </h2>
             <div className="mt-2 space-y-1.5">
               {pinnedMessages.map((pm) => (
@@ -300,9 +314,10 @@ export function GroupChatPage() {
                           <button
                             type="button"
                             onClick={() => void handleTogglePin(msg)}
-                            className="font-semibold text-primary hover:underline"
+                            className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"
                           >
-                            {msg.pinned ? 'เลิกปักหมุด' : '📌 ปักหมุด'}
+                            <IconPin className="h-3 w-3 shrink-0" />
+                            <span>{msg.pinned ? 'เลิกปักหมุด' : 'ปักหมุด'}</span>
                           </button>
                         )}
                       </div>
