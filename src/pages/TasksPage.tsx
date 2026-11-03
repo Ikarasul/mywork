@@ -1,20 +1,35 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Skeleton,
+  Toast,
+} from '../components/ui'
 import { formatSupabaseErrorThai, useAuth } from '../lib/auth'
+import { formatDateTimeThai } from '../lib/dateThai'
 import { formatStorageErrorThai, localStore, storage } from '../lib/storage'
 import { supabase } from '../lib/supabase'
 import type { TaskItem, TaskStatus, TaskType } from '../types'
 
-const TASK_TYPE_LABELS: Record<TaskType, string> = {
-  homework: 'การบ้าน',
-  work: 'งานกลุ่ม/โปรเจกต์',
-  exam: 'สอบ',
+const TASK_TYPE_META: Record<
+  TaskType,
+  { icon: string; label: string; tone: 'sky' | 'primary' | 'pink' }
+> = {
+  homework: { icon: '📘', label: 'การบ้าน', tone: 'sky' },
+  work: { icon: '🛠️', label: 'งานกลุ่ม/โปรเจกต์', tone: 'primary' },
+  exam: { icon: '🎯', label: 'สอบ', tone: 'pink' },
 }
 
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  todo: 'รอดำเนินการ',
-  in_progress: 'กำลังทำ',
-  done: 'เสร็จแล้ว',
+const STATUS_META: Record<
+  TaskStatus,
+  { icon: string; label: string; tone: 'warning' | 'sky' | 'success' }
+> = {
+  todo: { icon: '⏳', label: 'รอดำเนินการ', tone: 'warning' },
+  in_progress: { icon: '⚡', label: 'กำลังทำ', tone: 'sky' },
+  done: { icon: '✓', label: 'เสร็จแล้ว', tone: 'success' },
 }
 
 export function TasksPage() {
@@ -23,6 +38,7 @@ export function TasksPage() {
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [showCreateForm, setShowCreateForm] = useState(false)
 
   // ฟอร์มสร้างงานใหม่ (เฉพาะ owner/admin หรือโหมด localStorage)
   const [title, setTitle] = useState('')
@@ -136,6 +152,7 @@ export function TasksPage() {
       setCourseCode('')
       setDueDate('')
       setSelectedAssignees([])
+      setShowCreateForm(false)
     } catch (err) {
       setErrorMessage(formatSupabaseErrorThai(err))
     } finally {
@@ -219,21 +236,34 @@ export function TasksPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">งาน/การบ้าน/สอบ</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              ติดตามงานที่ได้รับมอบหมาย กำหนดส่ง และผู้รับผิดชอบต่องาน
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-bold text-ink sm:text-2xl">งาน/การบ้าน/สอบ</h1>
+              {isLoggedInViewer && <Badge tone="warning">👁️ โหมดดูอย่างเดียว</Badge>}
+            </div>
+            <p className="mt-1 text-xs text-ink-muted sm:text-sm">
+              ติดตามงานที่ได้รับมอบหมาย กำหนดส่งแบบไทย (พ.ศ.) และผู้รับผิดชอบต่องาน
             </p>
           </div>
+
+          {isOwnerOrAdmin && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setShowCreateForm((prev) => !prev)}
+            >
+              {showCreateForm ? 'ซ่อนฟอร์มสร้างงาน' : '+ สร้างงาน/นัดสอบใหม่'}
+            </Button>
+          )}
         </div>
 
         {isLoggedInViewer && (
-          <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3.5 text-sm text-amber-900">
-            <span className="font-bold">กรอกรหัสเชิญเพื่อแก้ไข</span> — ขณะนี้คุณอยู่ในโหมดผู้ชม (อ่านอย่างเดียว)
-            ไปที่หน้า{' '}
-            <Link to="/group" className="font-semibold text-indigo-700 underline">
+          <div className="mt-4 rounded-xl border border-status-warning bg-status-warning-soft p-3.5 text-sm text-status-warning-fg">
+            <span className="font-bold">โหมดดูอย่างเดียว (กรอกรหัสเชิญเพื่อแก้ไข)</span> —
+            คุณสามารถดูรายการงานและกำหนดส่งได้ แต่ไม่สามารถเพิ่มหรือแก้ไขสถานะงาน ไปที่หน้า{' '}
+            <Link to="/group" className="font-bold underline">
               จัดการกลุ่ม (/group)
             </Link>{' '}
             เพื่อกรอกรหัสเชิญเข้ากลุ่ม
@@ -241,95 +271,112 @@ export function TasksPage() {
         )}
 
         {user && currentRole === 'member' && (
-          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+          <div className="mt-4 rounded-xl border border-status-success bg-status-success-soft p-3 text-xs text-status-success-fg">
             สิทธิ์ของคุณคือ <strong>ผู้แก้ไข (Member)</strong>: คุณสามารถเปลี่ยนสถานะของงานที่คุณเป็นผู้รับผิดชอบได้
             (การสร้างงานใหม่และแก้กำหนดส่งสงวนไว้สำหรับผู้ดูแลและเจ้าของกลุ่ม)
           </div>
         )}
 
         {errorMessage && (
-          <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-            {errorMessage}
+          <div className="mt-4">
+            <Toast
+              tone="danger"
+              message={errorMessage}
+              onClose={() => setErrorMessage(null)}
+            />
           </div>
         )}
 
-        {isOwnerOrAdmin && (
-          <form onSubmit={(e) => void handleCreateTask(e)} className="mt-5 space-y-3 border-t border-slate-100 pt-4">
-            <h2 className="text-sm font-bold text-slate-800">
+        {isOwnerOrAdmin && showCreateForm && (
+          <form
+            onSubmit={(e) => void handleCreateTask(e)}
+            className="mt-5 space-y-3 rounded-2xl border border-line bg-surface-alt p-4"
+          >
+            <h2 className="text-sm font-bold text-ink">
               สร้างและมอบหมายงานใหม่ (สำหรับเจ้าของกลุ่ม / ผู้ดูแล)
             </h2>
             <div className="grid gap-3 sm:grid-cols-4">
               <div className="sm:col-span-2">
-                <label className="block text-xs font-medium text-slate-700">หัวข้องาน/การบ้าน/สอบ</label>
+                <label className="block text-xs font-medium text-ink-secondary">
+                  หัวข้องาน/การบ้าน/สอบ *
+                </label>
                 <input
                   type="text"
                   required
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="เช่น ส่งรายงานบทที่ 3 / สอบกลางภาค"
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="mt-1 min-h-[44px] sm:min-h-[38px] w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700">ประเภท</label>
+                <label className="block text-xs font-medium text-ink-secondary">ประเภท</label>
                 <select
                   value={taskType}
                   onChange={(e) => setTaskType(e.target.value as TaskType)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="mt-1 min-h-[44px] sm:min-h-[38px] w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink"
                 >
-                  <option value="homework">การบ้าน</option>
-                  <option value="work">งานกลุ่ม/โปรเจกต์</option>
-                  <option value="exam">สอบ</option>
+                  <option value="homework">📘 การบ้าน</option>
+                  <option value="work">🛠️ งานกลุ่ม/โปรเจกต์</option>
+                  <option value="exam">🎯 สอบ</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700">รหัสวิชา (ถ้ามี)</label>
+                <label className="block text-xs font-medium text-ink-secondary">
+                  รหัสวิชา (ถ้ามี)
+                </label>
                 <input
                   type="text"
                   value={courseCode}
                   onChange={(e) => setCourseCode(e.target.value)}
                   placeholder="ICT35467"
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase"
+                  className="mt-1 min-h-[44px] sm:min-h-[38px] w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink uppercase"
                 />
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs font-medium text-slate-700">รายละเอียดเพิ่มเติม</label>
+                <label className="block text-xs font-medium text-ink-secondary">
+                  รายละเอียดเพิ่มเติม
+                </label>
                 <input
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="รายละเอียดการส่งงานหรือขอบเขตเนื้อหา"
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="mt-1 min-h-[44px] sm:min-h-[38px] w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700">กำหนดส่ง / วันสอบ</label>
+                <label className="block text-xs font-medium text-ink-secondary">
+                  กำหนดส่ง / วันสอบ
+                </label>
                 <input
                   type="datetime-local"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs"
+                  className="mt-1 min-h-[44px] sm:min-h-[38px] w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-xs text-ink"
                 />
               </div>
 
               <div className="flex items-end">
-                <button
+                <Button
                   type="submit"
+                  variant="primary"
+                  size="sm"
                   disabled={saving}
-                  className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                  className="w-full"
                 >
-                  {saving ? 'กำลังสร้าง...' : '+ สร้างงาน'}
-                </button>
+                  {saving ? 'กำลังสร้าง...' : 'บันทึกงาน'}
+                </Button>
               </div>
             </div>
 
             {members.length > 0 && (
               <div className="pt-1">
-                <span className="block text-xs font-medium text-slate-700">
+                <span className="block text-xs font-medium text-ink-secondary">
                   มอบหมายผู้รับผิดชอบ (เลือกได้หลายคน):
                 </span>
                 <div className="mt-1.5 flex flex-wrap gap-2">
@@ -338,17 +385,17 @@ export function TasksPage() {
                     return (
                       <label
                         key={m.user_id}
-                        className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                        className={`inline-flex min-h-[38px] cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
                           checked
-                            ? 'border-indigo-600 bg-indigo-50 text-indigo-800'
-                            : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                            ? 'border-primary bg-primary-soft text-primary-fg'
+                            : 'border-line bg-surface text-ink-secondary hover:bg-surface-hover'
                         }`}
                       >
                         <input
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleAssignee(m.user_id)}
-                          className="rounded border-slate-300"
+                          className="rounded border-line-strong"
                         />
                         {m.display_name}
                       </label>
@@ -359,82 +406,100 @@ export function TasksPage() {
             )}
           </form>
         )}
-      </section>
+      </Card>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-        <h2 className="text-lg font-bold text-slate-900">รายการงานทั้งหมด ({tasks.length})</h2>
-        {loading ? (
-          <p className="mt-3 text-sm text-slate-500">กำลังโหลดรายการงาน...</p>
-        ) : tasks.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500">ยังไม่มีรายการงานในกลุ่มนี้</p>
-        ) : (
+      {loading ? (
+        <Skeleton lines={4} label="แมวเหมียวกำลังดึงรายการงานให้คุณ..." />
+      ) : tasks.length === 0 ? (
+        <Card>
+          <EmptyState
+            mood="happy"
+            title="ยังไม่มีรายการงาน การบ้าน หรือตารางสอบ"
+            description="เมื่อมีการสร้างงานใหม่ในกลุ่ม รายการงานและกำหนดส่งจะแสดงที่นี่ทันที"
+            action={
+              isOwnerOrAdmin ? (
+                <Button variant="primary" size="sm" onClick={() => setShowCreateForm(true)}>
+                  + สร้างงานแรกของกลุ่ม
+                </Button>
+              ) : undefined
+            }
+          />
+        </Card>
+      ) : (
+        <Card>
+          <h2 className="text-base font-bold text-ink">
+            รายการงานทั้งหมด ({tasks.length})
+          </h2>
           <div className="mt-4 space-y-3">
             {tasks.map((t) => {
               const isAssignedToMe = Boolean(user && t.assignee_ids?.includes(user.id))
               const canChangeStatus =
                 isOwnerOrAdmin || (currentRole === 'member' && isAssignedToMe)
+              const typeMeta = TASK_TYPE_META[t.task_type] ?? TASK_TYPE_META.homework
+              const statusMeta = STATUS_META[t.status] ?? STATUS_META.todo
 
               return (
                 <div
                   key={t.id}
-                  className="flex flex-col justify-between gap-3 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center"
+                  className="flex flex-col justify-between gap-3 rounded-2xl border border-line bg-surface-alt p-4 sm:flex-row sm:items-center"
                 >
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800">
-                        {TASK_TYPE_LABELS[t.task_type] ?? t.task_type}
-                      </span>
+                      <Badge tone={typeMeta.tone}>
+                        <span>{typeMeta.icon}</span>
+                        <span>{typeMeta.label}</span>
+                      </Badge>
+                      <Badge tone={statusMeta.tone}>
+                        <span>{statusMeta.icon}</span>
+                        <span>{statusMeta.label}</span>
+                      </Badge>
                       {t.course_code && (
-                        <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs font-semibold text-slate-700">
+                        <span className="rounded-lg border border-line bg-surface px-2 py-0.5 font-mono text-xs font-bold text-primary">
                           {t.course_code}
                         </span>
                       )}
-                      <h3 className="font-bold text-slate-900">{t.title}</h3>
+                      <h3 className="font-bold text-ink">{t.title}</h3>
                     </div>
 
                     {t.description && (
-                      <p className="text-xs text-slate-600">{t.description}</p>
+                      <p className="text-xs text-ink-secondary">{t.description}</p>
                     )}
 
-                    <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-500">
+                    <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-ink-muted">
                       <span>
-                        กำหนดส่ง:{' '}
-                        <strong>
-                          {t.due_date
-                            ? new Date(t.due_date).toLocaleString('th-TH')
-                            : 'ไม่ระบุ'}
+                        📅 กำหนดส่ง:{' '}
+                        <strong className="text-ink-secondary">
+                          {formatDateTimeThai(t.due_date)}
                         </strong>
                       </span>
 
                       {t.assignee_ids && t.assignee_ids.length > 0 && (
                         <span>
-                          ผู้รับผิดชอบ:{' '}
-                          {t.assignee_ids
-                            .map((uid) => memberNameMap.get(uid) ?? 'สมาชิก')
-                            .join(', ')}
+                          👤 ผู้รับผิดชอบ:{' '}
+                          <strong className="text-ink-secondary">
+                            {t.assignee_ids
+                              .map((uid) => memberNameMap.get(uid) ?? 'สมาชิก')
+                              .join(', ')}
+                          </strong>
                         </span>
                       )}
                     </div>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    {canChangeStatus ? (
+                    {canChangeStatus && (
                       <select
                         aria-label={`สถานะของงาน ${t.title}`}
                         value={t.status}
                         onChange={(e) =>
                           void handleUpdateStatus(t, e.target.value as TaskStatus)
                         }
-                        className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800"
+                        className="min-h-[44px] sm:min-h-[36px] rounded-xl border border-line-strong bg-surface px-3 py-1.5 text-xs font-semibold text-ink"
                       >
-                        <option value="todo">{STATUS_LABELS.todo}</option>
-                        <option value="in_progress">{STATUS_LABELS.in_progress}</option>
-                        <option value="done">{STATUS_LABELS.done}</option>
+                        <option value="todo">⏳ รอดำเนินการ</option>
+                        <option value="in_progress">⚡ กำลังทำ</option>
+                        <option value="done">✓ เสร็จแล้ว</option>
                       </select>
-                    ) : (
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                        {STATUS_LABELS[t.status] ?? t.status}
-                      </span>
                     )}
 
                     {isOwnerOrAdmin && (
@@ -444,16 +509,16 @@ export function TasksPage() {
                           aria-label={`แก้กำหนดส่งของ ${t.title}`}
                           value={t.due_date ? t.due_date.slice(0, 10) : ''}
                           onChange={(e) => void handleUpdateDueDate(t, e.target.value)}
-                          className="rounded border border-slate-300 px-2 py-1 text-xs"
+                          className="min-h-[44px] sm:min-h-[36px] rounded-xl border border-line-strong bg-surface px-2.5 py-1 text-xs text-ink"
                           title="แก้ไขกำหนดส่ง (เฉพาะผู้ดูแล/เจ้าของ)"
                         />
-                        <button
-                          type="button"
+                        <Button
+                          variant="danger"
+                          size="sm"
                           onClick={() => void handleDeleteTask(t.id)}
-                          className="rounded border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100"
                         >
                           ลบ
-                        </button>
+                        </Button>
                       </>
                     )}
                   </div>
@@ -461,8 +526,23 @@ export function TasksPage() {
               )
             })}
           </div>
-        )}
-      </section>
+        </Card>
+      )}
+
+      {/* ปุ่มเพิ่มเร็วลอยมุมล่างขวาบนมือถือ (เฉพาะผู้ที่มีสิทธิ์สร้างงาน) */}
+      {isOwnerOrAdmin && (
+        <button
+          type="button"
+          onClick={() => {
+            setShowCreateForm(true)
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+          }}
+          aria-label="สร้างงานด่วน"
+          className="fixed right-4 bottom-20 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-2xl font-bold text-ink-inverted shadow-lg transition hover:bg-primary-hover sm:hidden"
+        >
+          +
+        </button>
+      )}
     </div>
   )
 }

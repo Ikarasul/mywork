@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../lib/auth'
 import { hasLocalDataToMigrate, migrateLocalDataToSupabase } from '../lib/storage'
+import Button from './ui/Button'
 
 export function LocalDataMigrationBanner() {
   const { user, activeGroup, currentRole } = useAuth()
@@ -21,7 +22,8 @@ export function LocalDataMigrationBanner() {
     return null
   }
 
-  const canEditGroup = currentRole === 'owner' || currentRole === 'admin' || currentRole === 'member'
+  const canEditGroup =
+    currentRole === 'owner' || currentRole === 'admin' || currentRole === 'member'
 
   async function handleMigrate() {
     if (!user) return
@@ -42,38 +44,38 @@ export function LocalDataMigrationBanner() {
     } else {
       setHasData(false)
       setResultMessage(
-        `ย้ายข้อมูลในเครื่องขึ้นระบบสำเร็จจำนวน ${migratedCount} รายการ! (รีเฟรชหน้าหากต้องการดูข้อมูลล่าสุด)`,
+        `ย้ายข้อมูลในเครื่องขึ้นระบบสำเร็จจำนวน ${migratedCount} รายการ!`,
       )
     }
   }
 
   return (
-    <div className="mx-auto mt-4 max-w-6xl px-4">
-      <div className="flex flex-col justify-between gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950 shadow-xs sm:flex-row sm:items-center">
+    <div className="mx-auto mt-4 max-w-6xl px-3 sm:px-6">
+      <div className="flex flex-col justify-between gap-3 rounded-2xl border border-primary bg-primary-soft p-4 text-sm text-primary-fg shadow-xs sm:flex-row sm:items-center">
         <div>
-          <p className="font-bold text-indigo-900">
+          <p className="font-bold">
             พบข้อมูลที่เคยบันทึกไว้ในเครื่อง (localStorage) ก่อนเข้าสู่ระบบ
           </p>
-          <p className="mt-0.5 text-xs text-indigo-800">
+          <p className="mt-0.5 text-xs opacity-90">
             คุณสามารถย้ายข้อมูลตารางชีวิตส่วนตัวและตารางเรียนจากในเครื่องขึ้นไปเก็บบนฐานข้อมูลออนไลน์ได้ทันที
           </p>
           {errorMessage && (
-            <p className="mt-1 text-xs font-semibold text-rose-600">{errorMessage}</p>
+            <p className="mt-1 text-xs font-bold text-status-danger">{errorMessage}</p>
           )}
           {resultMessage && (
-            <p className="mt-1 text-xs font-semibold text-emerald-700">{resultMessage}</p>
+            <p className="mt-1 text-xs font-bold text-status-success">{resultMessage}</p>
           )}
         </div>
 
         {hasData && (
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             disabled={migrating}
             onClick={() => void handleMigrate()}
-            className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
           >
             {migrating ? 'กำลังย้ายข้อมูล...' : 'ย้ายข้อมูลในเครื่องขึ้นระบบ'}
-          </button>
+          </Button>
         )}
       </div>
     </div>

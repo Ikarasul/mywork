@@ -1,7 +1,23 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { formatStorageErrorThai, storage } from '../lib/storage'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Skeleton,
+  Toast,
+} from '../components/ui'
 import { useAuth } from '../lib/auth'
-import type { RoutineDay, RoutineItem } from '../types'
+import {
+  formatFullDateThai,
+  getCurrentMinutesOfDay,
+  getTodayDayOfWeek,
+} from '../lib/dateThai'
+import { formatStorageErrorThai, storage, timeToMinutes } from '../lib/storage'
+import type { DayOfWeek, RoutineDay, RoutineItem } from '../types'
+
+const DAYS_ORDER: DayOfWeek[] = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+const TABLET_DAYS: DayOfWeek[] = ['MON', 'TUE', 'WED', 'THU', 'FRI']
 
 const DAY_LABELS: Record<RoutineDay, string> = {
   ALL: 'ทุกวัน',
@@ -14,11 +30,26 @@ const DAY_LABELS: Record<RoutineDay, string> = {
   SUN: 'อาทิตย์',
 }
 
+const SHORT_DAY_LABELS: Record<DayOfWeek, string> = {
+  MON: 'จ.',
+  TUE: 'อ.',
+  WED: 'พ.',
+  THU: 'พฤ.',
+  FRI: 'ศ.',
+  SAT: 'ส.',
+  SUN: 'อา.',
+}
+
 export function LifeSchedulePage() {
   const { user } = useAuth()
+  const todayCode = useMemo(() => getTodayDayOfWeek(), [])
+  const [selectedMobileDay, setSelectedMobileDay] = useState<DayOfWeek>(todayCode)
+  const nowMinutes = useMemo(() => getCurrentMinutesOfDay(), [])
+
   const [items, setItems] = useState<RoutineItem[]>([])
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [showAddForm, setShowAddForm] = useState(false)
 
   const [title, setTitle] = useState('')
   const [day, setDay] = useState<RoutineDay>('ALL')
@@ -70,6 +101,7 @@ export function LifeSchedulePage() {
       await storage.set('routine_items', updated)
       setTitle('')
       setNotes('')
+      setShowAddForm(false)
       await loadRoutine()
     } catch (err) {
       setErrorMessage(formatStorageErrorThai(err))
@@ -89,153 +121,313 @@ export function LifeSchedulePage() {
     }
   }
 
+  function getRoutinesForDay(d: DayOfWeek) {
+    return items
+      .filter((item) => item.day === 'ALL' || item.day === d)
+      .sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time))
+  }
+
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">ตารางชีวิต</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              จัดการกิจวัตรประจำวันและตารางเวลาส่วนตัว (ข้อมูลส่วนนี้เป็นส่วนตัวเฉพาะบัญชีของคุณเท่านั้น)
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-bold text-ink sm:text-2xl">ตารางชีวิตส่วนตัว</h1>
+              <Badge tone="mint">
+                {user ? 'ซิงค์บัญชีส่วนตัว (RLS)' : 'บันทึกในเครื่อง (localStorage)'}
+              </Badge>
+            </div>
+            <p className="mt-1 text-xs text-ink-muted sm:text-sm">
+              วันนี้: {formatFullDateThai()} • จัดการกิจวัตรประจำวันและเวลาพักผ่อนของคุณ
             </p>
           </div>
-          <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
-            {user ? 'ซิงค์กับบัญชีส่วนตัว (Supabase RLS)' : 'โหมดบันทึกในเครื่อง (localStorage)'}
-          </span>
+
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setShowAddForm((prev) => !prev)}
+          >
+            {showAddForm ? 'ซ่อนฟอร์ม' : '+ เพิ่มกิจวัตรใหม่'}
+          </Button>
         </div>
 
         {errorMessage && (
-          <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-            {errorMessage}
+          <div className="mt-4">
+            <Toast
+              tone="danger"
+              message={errorMessage}
+              onClose={() => setErrorMessage(null)}
+            />
           </div>
         )}
 
-        <form onSubmit={(e) => void handleAddRoutine(e)} className="mt-5 grid gap-3 sm:grid-cols-6">
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-medium text-slate-700">กิจกรรม</label>
-            <input
-              type="text"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="เช่น ออกกำลังกาย / ทบทวนบทเรียน"
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
+        {showAddForm && (
+          <form
+            onSubmit={(e) => void handleAddRoutine(e)}
+            className="mt-5 grid gap-3 rounded-2xl border border-line bg-surface-alt p-4 sm:grid-cols-6"
+          >
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-ink-secondary">กิจกรรม *</label>
+              <input
+                type="text"
+                required
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="เช่น ออกกำลังกาย / ทบทวนบทเรียน"
+                className="mt-1 min-h-[44px] sm:min-h-[38px] w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink"
+              />
+            </div>
 
-          <div>
-            <label className="block text-xs font-medium text-slate-700">วัน</label>
-            <select
-              value={day}
-              onChange={(e) => setDay(e.target.value as RoutineDay)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            >
-              {Object.entries(DAY_LABELS).map(([k, label]) => (
-                <option key={k} value={k}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-700">เริ่ม</label>
-            <input
-              type="time"
-              required
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-700">สิ้นสุด</label>
-            <input
-              type="time"
-              required
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div className="flex items-end">
-            <button
-              type="submit"
-              disabled={saving}
-              className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {saving ? 'กำลังบันทึก...' : '+ เพิ่มกิจกรรม'}
-            </button>
-          </div>
-
-          <div className="sm:col-span-3">
-            <input
-              type="text"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="หมวดหมู่ (เช่น สุขภาพ, การเรียน, พักผ่อน)"
-              className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs"
-            />
-          </div>
-          <div className="sm:col-span-3">
-            <input
-              type="text"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"
-              className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs"
-            />
-          </div>
-        </form>
-      </section>
-
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-        <h2 className="text-lg font-bold text-slate-900">รายการตารางชีวิตของคุณ ({items.length})</h2>
-        {loading ? (
-          <p className="mt-3 text-sm text-slate-500">กำลังโหลดข้อมูล...</p>
-        ) : items.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500">
-            ยังไม่มีรายการตารางชีวิต เริ่มเพิ่มกิจกรรมด้านบนได้เลย
-          </p>
-        ) : (
-          <div className="mt-4 divide-y divide-slate-100">
-            {items.map((item) => (
-              <div
-                key={item.id}
-                className="flex flex-wrap items-center justify-between gap-3 py-3"
+            <div>
+              <label className="block text-xs font-medium text-ink-secondary">วัน</label>
+              <select
+                value={day}
+                onChange={(e) => setDay(e.target.value as RoutineDay)}
+                className="mt-1 min-h-[44px] sm:min-h-[38px] w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink"
               >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800">
-                      {DAY_LABELS[item.day] ?? item.day}
-                    </span>
-                    <span className="font-mono text-xs font-semibold text-slate-600">
-                      {item.start_time} - {item.end_time}
-                    </span>
-                    <span className="font-semibold text-slate-900">{item.title}</span>
-                    {item.category && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                        {item.category}
-                      </span>
-                    )}
-                  </div>
-                  {item.notes && <p className="mt-1 text-xs text-slate-500">{item.notes}</p>}
-                </div>
+                {Object.entries(DAY_LABELS).map(([k, label]) => (
+                  <option key={k} value={k}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-                <button
-                  type="button"
-                  onClick={() => void handleRemoveRoutine(item.id)}
-                  className="rounded border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100"
-                >
-                  ลบ
-                </button>
-              </div>
-            ))}
-          </div>
+            <div>
+              <label className="block text-xs font-medium text-ink-secondary">เริ่ม</label>
+              <input
+                type="time"
+                required
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="mt-1 min-h-[44px] sm:min-h-[38px] w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-ink-secondary">สิ้นสุด</label>
+              <input
+                type="time"
+                required
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="mt-1 min-h-[44px] sm:min-h-[38px] w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink"
+              />
+            </div>
+
+            <div className="flex items-end">
+              <Button type="submit" variant="primary" size="sm" disabled={saving} className="w-full">
+                {saving ? 'กำลังบันทึก...' : 'บันทึกกิจกรรม'}
+              </Button>
+            </div>
+
+            <div className="sm:col-span-3">
+              <input
+                type="text"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="หมวดหมู่ (เช่น สุขภาพ, การเรียน, พักผ่อน)"
+                className="min-h-[44px] sm:min-h-[38px] w-full rounded-xl border border-line-strong bg-surface px-3 py-1.5 text-xs text-ink"
+              />
+            </div>
+            <div className="sm:col-span-3">
+              <input
+                type="text"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"
+                className="min-h-[44px] sm:min-h-[38px] w-full rounded-xl border border-line-strong bg-surface px-3 py-1.5 text-xs text-ink"
+              />
+            </div>
+          </form>
         )}
-      </section>
+      </Card>
+
+      {loading ? (
+        <Skeleton lines={4} label="แมวเหมียวกำลังจัดตารางชีวิตให้คุณ..." />
+      ) : items.length === 0 ? (
+        <Card>
+          <EmptyState
+            mood="happy"
+            title="ยังไม่มีรายการตารางชีวิต"
+            description="ออกแบบตารางชีวิตประจำวันของคุณ เช่น เวลาอ่านหนังสือ ออกกำลังกาย หรือพักผ่อน"
+            action={
+              <Button variant="primary" size="sm" onClick={() => setShowAddForm(true)}>
+                + เริ่มเพิ่มกิจกรรมแรก
+              </Button>
+            }
+          />
+        </Card>
+      ) : (
+        <Card>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-bold text-ink">
+              ตารางชีวิตตามวัน ({items.length} กิจกรรม)
+            </h2>
+            <Badge tone="primary">● วันนี้: วัน{DAY_LABELS[todayCode]}</Badge>
+          </div>
+
+          {/* มือถือ (<640px): แท็บเลือกวัน จ-อา แสดงทีละวัน */}
+          <div className="sm:hidden space-y-4">
+            <div className="grid grid-cols-7 gap-1 rounded-xl border border-line bg-surface-alt p-1">
+              {DAYS_ORDER.map((d) => {
+                const isSelected = selectedMobileDay === d
+                const isToday = d === todayCode
+                return (
+                  <button
+                    key={`life-mob-${d}`}
+                    type="button"
+                    onClick={() => setSelectedMobileDay(d)}
+                    className={`flex min-h-[44px] items-center justify-center rounded-lg text-xs font-bold transition ${
+                      isSelected
+                        ? 'bg-primary text-ink-inverted'
+                        : isToday
+                          ? 'border border-primary text-primary'
+                          : 'text-ink-secondary'
+                    }`}
+                  >
+                    {SHORT_DAY_LABELS[d]}
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="space-y-2.5">
+              {getRoutinesForDay(selectedMobileDay).map((item) => {
+                const isNow =
+                  selectedMobileDay === todayCode &&
+                  nowMinutes >= timeToMinutes(item.start_time) &&
+                  nowMinutes <= timeToMinutes(item.end_time)
+                return (
+                  <div
+                    key={item.id}
+                    className={`flex items-center justify-between gap-2 rounded-xl border p-3.5 ${
+                      isNow
+                        ? 'border-primary bg-primary-soft/50'
+                        : 'border-line bg-surface-alt'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold text-primary">
+                          {item.start_time} – {item.end_time}
+                        </span>
+                        <Badge tone="neutral">{item.category}</Badge>
+                      </div>
+                      <p className="mt-1 text-sm font-bold text-ink">{item.title}</p>
+                      {item.notes && (
+                        <p className="mt-0.5 text-xs text-ink-muted">{item.notes}</p>
+                      )}
+                    </div>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => void handleRemoveRoutine(item.id)}
+                    >
+                      ลบ
+                    </Button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* แท็บเล็ต (5 วัน) และ คอมพิวเตอร์ (7 วัน) */}
+          <div className="hidden sm:grid sm:grid-cols-5 lg:hidden gap-3">
+            {TABLET_DAYS.map((d) => {
+              const isToday = d === todayCode
+              const dayItems = getRoutinesForDay(d)
+              return (
+                <div
+                  key={`tab-life-${d}`}
+                  className={`rounded-xl border p-3 ${
+                    isToday ? 'border-primary bg-primary-soft/20' : 'border-line bg-surface-alt'
+                  }`}
+                >
+                  <div className="flex items-center justify-between border-b border-line pb-2">
+                    <span className="text-xs font-bold text-ink">วัน{DAY_LABELS[d]}</span>
+                    {isToday && <Badge tone="primary">วันนี้</Badge>}
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {dayItems.map((item) => (
+                      <div
+                        key={`${d}-${item.id}`}
+                        className="rounded-lg border border-line bg-surface p-2 text-xs"
+                      >
+                        <div className="font-mono text-[11px] font-bold text-primary">
+                          {item.start_time}–{item.end_time}
+                        </div>
+                        <div className="font-bold text-ink">{item.title}</div>
+                        <button
+                          type="button"
+                          onClick={() => void handleRemoveRoutine(item.id)}
+                          className="mt-1 text-[10px] font-semibold text-status-danger hover:underline"
+                        >
+                          ลบ
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="hidden lg:grid lg:grid-cols-7 gap-3">
+            {DAYS_ORDER.map((d) => {
+              const isToday = d === todayCode
+              const dayItems = getRoutinesForDay(d)
+              return (
+                <div
+                  key={`desk-life-${d}`}
+                  className={`rounded-xl border p-3 ${
+                    isToday ? 'border-primary bg-primary-soft/20' : 'border-line bg-surface-alt'
+                  }`}
+                >
+                  <div className="flex items-center justify-between border-b border-line pb-2">
+                    <span className="text-xs font-bold text-ink">วัน{DAY_LABELS[d]}</span>
+                    {isToday && <Badge tone="primary">วันนี้</Badge>}
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {dayItems.map((item) => (
+                      <div
+                        key={`${d}-${item.id}`}
+                        className="rounded-lg border border-line bg-surface p-2 text-xs"
+                      >
+                        <div className="font-mono text-[11px] font-bold text-primary">
+                          {item.start_time}–{item.end_time}
+                        </div>
+                        <div className="font-bold text-ink">{item.title}</div>
+                        <button
+                          type="button"
+                          onClick={() => void handleRemoveRoutine(item.id)}
+                          className="mt-1 text-[10px] font-semibold text-status-danger hover:underline"
+                        >
+                          ลบ
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* ปุ่มเพิ่มเร็วลอยมุมล่างขวาบนมือถือ */}
+      <button
+        type="button"
+        onClick={() => {
+          setShowAddForm(true)
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+        }}
+        aria-label="เพิ่มกิจวัตรด่วน"
+        className="fixed right-4 bottom-20 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-2xl font-bold text-ink-inverted shadow-lg transition hover:bg-primary-hover sm:hidden"
+      >
+        +
+      </button>
     </div>
   )
 }

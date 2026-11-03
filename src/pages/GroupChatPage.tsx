@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Skeleton,
+  Toast,
+} from '../components/ui'
 import { formatSupabaseErrorThai, useAuth } from '../lib/auth'
+import { formatTimeThai } from '../lib/dateThai'
 import { supabase } from '../lib/supabase'
 import type { ChatMessageItem } from '../types'
 
@@ -144,11 +153,14 @@ export function GroupChatPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
+      <Card>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">แชทกลุ่ม</h1>
-            <p className="mt-1 text-sm text-slate-500">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-bold text-ink sm:text-2xl">แชทกลุ่ม</h1>
+              {isLoggedInViewer && <Badge tone="warning">👁️ โหมดดูอย่างเดียว</Badge>}
+            </div>
+            <p className="mt-1 text-xs text-ink-muted sm:text-sm">
               {activeGroup
                 ? `ห้องสนทนาเรียลไทม์ของกลุ่ม "${activeGroup.name}"`
                 : 'ห้องสนทนาแลกเปลี่ยนข้อมูลในกลุ่มเรียน (Supabase Realtime)'}
@@ -157,20 +169,27 @@ export function GroupChatPage() {
         </div>
 
         {!user && (
-          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-            กรุณา{' '}
-            <Link to="/login" className="font-semibold text-indigo-600 underline">
-              เข้าสู่ระบบ (/login)
-            </Link>{' '}
-            และเข้าร่วมกลุ่มเพื่อใช้งานแชทกลุ่มแบบเรียลไทม์
+          <div className="mt-4">
+            <EmptyState
+              mood="idle"
+              title="เข้าสู่ระบบเพื่อใช้งานแชทกลุ่มเรียลไทม์"
+              description="พูดคุย ปรึกษางานกลุ่ม และปักหมุดข้อความสำคัญร่วมกับเพื่อนในกลุ่มเรียน"
+              action={
+                <Link to="/login">
+                  <Button variant="primary" size="sm">
+                    ไปหน้าเข้าสู่ระบบ (/login)
+                  </Button>
+                </Link>
+              }
+            />
           </div>
         )}
 
         {isLoggedInViewer && (
-          <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3.5 text-sm text-amber-900">
-            <span className="font-bold">กรอกรหัสเชิญเพื่อแก้ไข</span> — คุณมีสิทธิ์เป็นผู้ชม (อ่านอย่างเดียว)
-            จึงยังไม่สามารถส่งข้อความหรือปักหมุดแชทได้ กรุณาไปที่หน้า{' '}
-            <Link to="/group" className="font-semibold text-indigo-700 underline">
+          <div className="mt-4 rounded-xl border border-status-warning bg-status-warning-soft p-3.5 text-sm text-status-warning-fg">
+            <span className="font-bold">โหมดดูอย่างเดียว (กรอกรหัสเชิญเพื่อแก้ไข)</span> —
+            คุณมีสิทธิ์เป็นผู้ชม จึงยังไม่สามารถส่งข้อความหรือปักหมุดแชทได้ กรุณาไปที่หน้า{' '}
+            <Link to="/group" className="font-bold underline">
               จัดการกลุ่ม (/group)
             </Link>{' '}
             เพื่อกรอกรหัสเชิญ
@@ -178,32 +197,36 @@ export function GroupChatPage() {
         )}
 
         {errorMessage && (
-          <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-            {errorMessage}
+          <div className="mt-4">
+            <Toast
+              tone="danger"
+              message={errorMessage}
+              onClose={() => setErrorMessage(null)}
+            />
           </div>
         )}
 
         {/* ส่วนข้อความที่ปักหมุด */}
         {pinnedMessages.length > 0 && (
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/80 p-3.5">
-            <h2 className="text-xs font-bold text-amber-900 uppercase">
-              ข้อความที่ปักหมุดไว้ ({pinnedMessages.length})
+          <div className="mt-4 rounded-xl border border-accent-amber bg-accent-amber-soft/50 p-3.5">
+            <h2 className="text-xs font-bold text-accent-amber-fg uppercase">
+              📌 ข้อความที่ปักหมุดไว้ ({pinnedMessages.length})
             </h2>
             <div className="mt-2 space-y-1.5">
               {pinnedMessages.map((pm) => (
                 <div
                   key={`pin-${pm.id}`}
-                  className="flex items-center justify-between gap-2 rounded bg-white px-3 py-1.5 text-xs shadow-2xs"
+                  className="flex items-center justify-between gap-2 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs"
                 >
                   <div>
-                    <strong className="text-indigo-700">{pm.sender_name}:</strong>{' '}
-                    <span className="text-slate-800">{pm.content}</span>
+                    <strong className="text-primary">{pm.sender_name}:</strong>{' '}
+                    <span className="text-ink">{pm.content}</span>
                   </div>
                   {canChat && (
                     <button
                       type="button"
                       onClick={() => void handleTogglePin(pm)}
-                      className="text-[11px] font-medium text-amber-700 hover:underline"
+                      className="min-h-[32px] px-2 text-[11px] font-semibold text-accent-amber hover:underline"
                     >
                       เลิกปักหมุด
                     </button>
@@ -216,14 +239,16 @@ export function GroupChatPage() {
 
         {/* รายการข้อความแชท */}
         {user && activeGroup && (
-          <div className="mt-4 flex h-96 flex-col justify-between rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="mt-4 flex h-[420px] flex-col justify-between rounded-2xl border border-line bg-surface-alt p-4">
             <div className="flex-1 space-y-3 overflow-y-auto pr-1">
               {loading ? (
-                <p className="text-sm text-slate-500">กำลังโหลดข้อความ...</p>
+                <Skeleton lines={3} label="กำลังโหลดข้อความแชท..." />
               ) : messages.length === 0 ? (
-                <p className="text-sm text-slate-400">
-                  ยังไม่มีข้อความในกลุ่มนี้ เริ่มต้นสนทนาได้เลย!
-                </p>
+                <EmptyState
+                  mood="happy"
+                  title="ยังไม่มีข้อความในกลุ่มนี้"
+                  description="ทักทายเพื่อนในกลุ่มเพื่อเริ่มต้นสนทนาได้เลยเหมียว!"
+                />
               ) : (
                 messages.map((msg) => {
                   const isMine = msg.sender_id === user.id
@@ -232,29 +257,26 @@ export function GroupChatPage() {
                       key={msg.id}
                       className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
                     >
-                      <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                        <span className="font-semibold text-slate-700">{msg.sender_name}</span>
-                        <span>
-                          {new Date(msg.created_at).toLocaleTimeString('th-TH', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                      <div className="flex items-center gap-2 text-[11px] text-ink-muted">
+                        <span className="font-semibold text-ink-secondary">
+                          {msg.sender_name}
                         </span>
+                        <span>{formatTimeThai(msg.created_at)}</span>
                         {canChat && (
                           <button
                             type="button"
                             onClick={() => void handleTogglePin(msg)}
-                            className="text-indigo-600 hover:underline"
+                            className="font-semibold text-primary hover:underline"
                           >
-                            {msg.pinned ? 'เลิกปักหมุด' : 'ปักหมุด'}
+                            {msg.pinned ? 'เลิกปักหมุด' : '📌 ปักหมุด'}
                           </button>
                         )}
                       </div>
                       <div
                         className={`mt-1 max-w-md rounded-2xl px-3.5 py-2 text-sm shadow-2xs ${
                           isMine
-                            ? 'bg-indigo-600 text-white'
-                            : 'border border-slate-200 bg-white text-slate-900'
+                            ? 'bg-primary text-ink-inverted'
+                            : 'border border-line bg-surface text-ink'
                         }`}
                       >
                         {msg.content}
@@ -269,7 +291,7 @@ export function GroupChatPage() {
             {canChat && (
               <form
                 onSubmit={(e) => void handleSendMessage(e)}
-                className="mt-3 flex gap-2 border-t border-slate-200 pt-3"
+                className="mt-3 flex gap-2 border-t border-line pt-3"
               >
                 <input
                   type="text"
@@ -277,20 +299,16 @@ export function GroupChatPage() {
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   placeholder="พิมพ์ข้อความในกลุ่ม..."
-                  className="flex-1 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                  className="min-h-[44px] flex-1 rounded-xl border border-line-strong bg-surface px-3.5 py-2 text-sm text-ink focus:border-primary focus:outline-none"
                 />
-                <button
-                  type="submit"
-                  disabled={sending}
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
-                >
+                <Button type="submit" variant="primary" disabled={sending}>
                   {sending ? 'กำลังส่ง...' : 'ส่งข้อความ'}
-                </button>
+                </Button>
               </form>
             )}
           </div>
         )}
-      </section>
+      </Card>
     </div>
   )
 }
