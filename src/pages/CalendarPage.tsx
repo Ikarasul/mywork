@@ -20,6 +20,7 @@ import {
 import { useGoogleCalendar } from '../lib/googleCalendar'
 import {
   DEFAULT_SEMESTER,
+  KNOWN_COURSE_LINKS,
   getSampleScheduleFromCsv,
   storage,
   timeToMinutes,
@@ -122,9 +123,16 @@ export function CalendarPage() {
         storage.get<TaskItem[]>(taskStorageKey),
       ])
 
-      setSessions(
-        schedData && schedData.length > 0 ? schedData : getSampleScheduleFromCsv(),
-      )
+      const rawSched =
+        schedData && schedData.length > 0 ? schedData : getSampleScheduleFromCsv()
+      const enrichedSched = rawSched.map((s) => ({
+        ...s,
+        online_url: s.online_url || KNOWN_COURSE_LINKS[s.course_code]?.online_url,
+        contact_url: s.contact_url || KNOWN_COURSE_LINKS[s.course_code]?.contact_url,
+        online_link: s.online_link || Boolean(s.online_url || KNOWN_COURSE_LINKS[s.course_code]?.online_url),
+      }))
+
+      setSessions(enrichedSched)
       setRoutines(routineData ?? [])
       setTasks(taskData ?? [])
     } catch {
@@ -708,6 +716,32 @@ export function CalendarPage() {
                               📍 {ev.location}
                             </p>
                           )}
+                          {(ev.rawClass?.online_url || ev.rawClass?.contact_url) && (
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-line/30">
+                              {ev.rawClass.online_url && (
+                                <a
+                                  href={ev.rawClass.online_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-accent-pink shadow-2xs hover:underline"
+                                >
+                                  🔗 Meet ↗
+                                </a>
+                              )}
+                              {ev.rawClass.contact_url && (
+                                <a
+                                  href={ev.rawClass.contact_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-status-success shadow-2xs hover:underline"
+                                >
+                                  💬 LINE ↗
+                                </a>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )
                     })
@@ -968,6 +1002,37 @@ export function CalendarPage() {
                   <span className="font-medium text-ink">
                     📍 {selectedUnifiedEvent.location}
                   </span>
+                </div>
+              )}
+
+              {/* ปุ่มลิงก์เข้าเรียนและติดต่อของรายวิชา */}
+              {selectedUnifiedEvent.rawClass && (selectedUnifiedEvent.rawClass.online_url || selectedUnifiedEvent.rawClass.contact_url) && (
+                <div className="mt-2 flex flex-col gap-2 rounded-xl border border-line bg-surface p-3">
+                  <span className="font-bold text-ink">ลิงก์ที่เกี่ยวข้อง:</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedUnifiedEvent.rawClass.online_url && (
+                      <a
+                        href={selectedUnifiedEvent.rawClass.online_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-accent-pink px-3 py-2 text-xs font-bold text-ink-inverted shadow-2xs hover:opacity-95"
+                      >
+                        <span>🔗 Click online classes (Google Meet)</span>
+                        <span>↗</span>
+                      </a>
+                    )}
+                    {selectedUnifiedEvent.rawClass.contact_url && (
+                      <a
+                        href={selectedUnifiedEvent.rawClass.contact_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-status-success px-3 py-2 text-xs font-bold text-ink-inverted shadow-2xs hover:opacity-95"
+                      >
+                        <span>💬 Contact (LINE กลุ่มอาจารย์)</span>
+                        <span>↗</span>
+                      </a>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

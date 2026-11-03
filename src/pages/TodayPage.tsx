@@ -12,6 +12,7 @@ import {
 import { useGoogleCalendar } from '../lib/googleCalendar'
 import {
   DEFAULT_SEMESTER,
+  KNOWN_COURSE_LINKS,
   getSampleScheduleFromCsv,
   storage,
   timeToMinutes,
@@ -72,8 +73,14 @@ export function TodayPage() {
         storage.get<TaskItem[]>(taskStorageKey),
       ])
 
-      const resolvedSchedule =
+      const resolvedSchedule = (
         schedData && schedData.length > 0 ? schedData : getSampleScheduleFromCsv()
+      ).map((s) => ({
+        ...s,
+        online_url: s.online_url || KNOWN_COURSE_LINKS[s.course_code]?.online_url,
+        contact_url: s.contact_url || KNOWN_COURSE_LINKS[s.course_code]?.contact_url,
+        online_link: s.online_link || Boolean(s.online_url || KNOWN_COURSE_LINKS[s.course_code]?.online_url),
+      }))
 
       setSessions(resolvedSchedule)
       setRoutines(routineData ?? [])
@@ -219,6 +226,31 @@ export function TodayPage() {
                             <Badge tone="mint">มีเรียนออนไลน์</Badge>
                           )}
                         </div>
+
+                        {(c.online_url || c.contact_url) && (
+                          <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-line/40 pt-2">
+                            {c.online_url && (
+                              <a
+                                href={c.online_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-accent-pink shadow-2xs hover:underline"
+                              >
+                                <span>🔗 Click online classes ↗</span>
+                              </a>
+                            )}
+                            {c.contact_url && (
+                              <a
+                                href={c.contact_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-status-success shadow-2xs hover:underline"
+                              >
+                                <span>💬 Contact (LINE กลุ่ม) ↗</span>
+                              </a>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })}

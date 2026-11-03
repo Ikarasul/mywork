@@ -62,6 +62,8 @@ export interface CourseScheduleItem {
   room: string
   instructor: string
   online_link: boolean
+  online_url?: string
+  contact_url?: string
 }
 
 export interface RoutineItem {

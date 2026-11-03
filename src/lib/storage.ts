@@ -39,6 +39,30 @@ export function timeToMinutes(timeStr: string): number {
   return (h || 0) * 60 + (m || 0)
 }
 
+export const KNOWN_COURSE_LINKS: Record<
+  string,
+  { online_url?: string; contact_url?: string }
+> = {
+  ICT35467: {
+    online_url: 'https://meet.google.com/soh-gxca-vdx',
+    contact_url:
+      'https://line.me/ti/g2/qM6MWzrgIAlY5e7vYg4DNJS0cVi0kOcbmpMiCg?utm_source=invitation&utm_medium=link_copy&utm_campaign=default',
+  },
+  MGT33267: {
+    online_url: 'https://meet.google.com/htk-qqsv-hsk',
+    contact_url: 'https://line.me/ti/g/SYCGY-KsXd',
+  },
+  MGT23667: {
+    contact_url: 'https://line.me/R/ti/g/ELKTLW9L2m',
+  },
+  MGT13267: {
+    contact_url: 'https://line.me/R/ti/g/tZhvVxzfWJ',
+  },
+  MGT13167: {
+    contact_url: 'https://line.me/R/ti/g/EjZESMY-bK',
+  },
+}
+
 export function parseScheduleCsvText(csvText: string): CsvParseResult {
   const errors: string[] = []
   const items: CourseScheduleItem[] = []
@@ -57,11 +81,11 @@ export function parseScheduleCsvText(csvText: string): CsvParseResult {
   const headerCols = rawLines[0].split(',').map((h) => h.trim().toLowerCase())
   const missingHeaders = EXPECTED_CSV_HEADERS.filter((eh) => !headerCols.includes(eh))
 
-  if (missingHeaders.length > 0 || headerCols.length !== EXPECTED_CSV_HEADERS.length) {
+  if (missingHeaders.length > 0) {
     return {
       items: [],
       errors: [
-        `คอลัมน์ส่วนหัว (Header) ในไฟล์ CSV ไม่ถูกต้อง (ต้องมี: ${EXPECTED_CSV_HEADERS.join(', ')})`,
+        `คอลัมน์ส่วนหัว (Header) ในไฟล์ CSV ไม่ถูกต้อง (ต้องมีอย่างน้อย: ${EXPECTED_CSV_HEADERS.join(', ')})`,
       ],
     }
   }
@@ -72,9 +96,9 @@ export function parseScheduleCsvText(csvText: string): CsvParseResult {
     const rowNum = i + 1
     const cols = rawLines[i].split(',').map((c) => c.trim())
 
-    if (cols.length !== EXPECTED_CSV_HEADERS.length) {
+    if (cols.length < EXPECTED_CSV_HEADERS.length) {
       errors.push(
-        `บรรทัดที่ ${rowNum}: จำนวนคอลัมน์ไม่ครบ 10 คอลัมน์ (พบ ${cols.length} คอลัมน์)`,
+        `บรรทัดที่ ${rowNum}: จำนวนคอลัมน์ไม่ครบ (พบ ${cols.length} คอลัมน์)`,
       )
       continue
     }
@@ -89,6 +113,16 @@ export function parseScheduleCsvText(csvText: string): CsvParseResult {
     const room = cols[colIndex('room')]
     const instructor = cols[colIndex('instructor')]
     const onlineRaw = cols[colIndex('online_link')].toLowerCase()
+
+    const onlineUrlCol = colIndex('online_url')
+    const contactUrlCol = colIndex('contact_url')
+    const parsedOnlineUrl = onlineUrlCol !== -1 ? cols[onlineUrlCol] : undefined
+    const parsedContactUrl = contactUrlCol !== -1 ? cols[contactUrlCol] : undefined
+
+    const finalOnlineUrl =
+      parsedOnlineUrl || KNOWN_COURSE_LINKS[course_code]?.online_url || undefined
+    const finalContactUrl =
+      parsedContactUrl || KNOWN_COURSE_LINKS[course_code]?.contact_url || undefined
 
     if (!course_code) {
       errors.push(`บรรทัดที่ ${rowNum}: รหัสวิชา (course_code) ห้ามว่าง`)
@@ -152,7 +186,9 @@ export function parseScheduleCsvText(csvText: string): CsvParseResult {
       end,
       room,
       instructor,
-      online_link: onlineRaw === 'true',
+      online_link: onlineRaw === 'true' || Boolean(finalOnlineUrl),
+      online_url: finalOnlineUrl,
+      contact_url: finalContactUrl,
     })
   }
 

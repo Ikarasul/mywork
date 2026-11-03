@@ -29,6 +29,7 @@ import {
 import { useGoogleCalendar } from '../lib/googleCalendar'
 import {
   DEFAULT_SEMESTER,
+  KNOWN_COURSE_LINKS,
   formatStorageErrorThai,
   getSampleScheduleFromCsv,
   makeSessionDedupeKey,
@@ -278,7 +279,13 @@ export function ClassSchedulePage() {
         await storage.set(storageKey, sample)
         setSessions(sample)
       } else {
-        setSessions(list)
+        const enriched = list.map((s) => ({
+          ...s,
+          online_url: s.online_url || KNOWN_COURSE_LINKS[s.course_code]?.online_url,
+          contact_url: s.contact_url || KNOWN_COURSE_LINKS[s.course_code]?.contact_url,
+          online_link: s.online_link || Boolean(s.online_url || KNOWN_COURSE_LINKS[s.course_code]?.online_url),
+        }))
+        setSessions(enriched)
       }
     } catch (err) {
       setErrorMessage(formatStorageErrorThai(err))
@@ -653,6 +660,33 @@ export function ClassSchedulePage() {
                               {sess.start}–{sess.end}
                             </span>
                           </div>
+
+                          {(sess.online_url || sess.contact_url) && (
+                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                              {sess.online_url && (
+                                <a
+                                  href={sess.online_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-0.5 rounded bg-surface px-1 py-0.5 text-[9px] font-bold text-accent-pink shadow-2xs hover:underline"
+                                >
+                                  🔗 Meet
+                                </a>
+                              )}
+                              {sess.contact_url && (
+                                <a
+                                  href={sess.contact_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-0.5 rounded bg-surface px-1 py-0.5 text-[9px] font-bold text-status-success shadow-2xs hover:underline"
+                                >
+                                  💬 LINE
+                                </a>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )
                     })}
@@ -1194,6 +1228,35 @@ export function ClassSchedulePage() {
                             <Badge tone="mint">มีเรียนออนไลน์</Badge>
                           )}
                         </div>
+
+                        {(sess.online_url || sess.contact_url) && (
+                          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line/40 pt-2.5">
+                            {sess.online_url && (
+                              <a
+                                href={sess.online_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-accent-pink shadow-2xs hover:underline"
+                              >
+                                <span>🔗 Click online classes</span>
+                                <span>↗</span>
+                              </a>
+                            )}
+                            {sess.contact_url && (
+                              <a
+                                href={sess.contact_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-status-success shadow-2xs hover:underline"
+                              >
+                                <span>💬 Contact (LINE กลุ่ม)</span>
+                                <span>↗</span>
+                              </a>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })
@@ -1342,15 +1405,39 @@ export function ClassSchedulePage() {
                           )}
                         </td>
                         <td className="py-4 px-3 text-xs font-medium text-ink-secondary">
-                          {instructorText}
+                          <div>{instructorText}</div>
+                          {s.contact_url && (
+                            <a
+                              href={s.contact_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="mt-1.5 inline-flex items-center gap-1 rounded-lg border border-status-success/40 bg-status-success-soft px-2 py-0.5 text-[11px] font-bold text-status-success shadow-2xs hover:underline"
+                            >
+                              <span>💬 Contact (LINE)</span>
+                              <span>↗</span>
+                            </a>
+                          )}
                         </td>
                         <td className="py-4 px-3">
                           {s.online_link ? (
-                            <div className="space-y-1">
+                            <div className="space-y-1.5">
                               <Badge tone="mint">มีเรียนออนไลน์</Badge>
-                              <div className="text-[11px] font-semibold text-accent-pink">
-                                Click online classes
-                              </div>
+                              {s.online_url ? (
+                                <a
+                                  href={s.online_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1 text-[11px] font-bold text-accent-pink hover:underline"
+                                >
+                                  <span>🔗 Click online classes ↗</span>
+                                </a>
+                              ) : (
+                                <div className="text-[11px] font-semibold text-accent-pink">
+                                  Click online classes
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <span className="text-ink-muted">–</span>
