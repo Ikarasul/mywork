@@ -6,8 +6,11 @@ import {
   useState,
   type ChangeEvent,
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
 } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import CourseDialog from '../components/CourseDialog'
 import GoogleCalendarSyncBar, {
   GoogleCalendarEventModal,
 } from '../components/GoogleCalendarSyncBar'
@@ -20,25 +23,41 @@ import {
   Skeleton,
   Toast,
 } from '../components/ui'
-import { useAuth } from '../lib/auth'
+import { formatSupabaseErrorThai, useAuth } from '../lib/auth'
 import {
   formatFullDateThai,
   getCurrentMinutesOfDay,
+  getRelativeCountdownThai,
   getTodayDayOfWeek,
 } from '../lib/dateThai'
 import { useGoogleCalendar } from '../lib/googleCalendar'
 import {
+  COURSE_COLOR_PALETTE,
   DEFAULT_SEMESTER,
   KNOWN_COURSE_LINKS,
+  buildCourseColorMap,
+  buildDefaultCourseLinks,
   formatStorageErrorThai,
   getSampleScheduleFromCsv,
+  localStore,
   makeSessionDedupeKey,
   mergeScheduleWithoutDuplicates,
   parseScheduleCsvText,
+  resolveLocationText,
+  saveCourseDetails,
   storage,
   timeToMinutes,
 } from '../lib/storage'
-import type { CourseScheduleItem, DayOfWeek, GoogleCalendarEventItem } from '../types'
+import { supabase } from '../lib/supabase'
+import type {
+  CourseLinkItem,
+  CourseScheduleItem,
+  DayOfWeek,
+  GoogleCalendarEventItem,
+  TaskItem,
+  TaskStatus,
+  TaskType,
+} from '../types'
 
 interface SemesterOption {
   id: string
@@ -150,59 +169,16 @@ const GRID_START_MIN = 7 * 60 // 07:00 = 420
 const GRID_END_MIN = 20 * 60 // 20:00 = 1200
 const TOTAL_HALF_HOUR_SLOTS = 26 // 13 ชั่วโมง * 2 (ช่องละ 30 นาที)
 
-const COURSE_TOKEN_PALETTE = [
-  {
-    bg: 'bg-accent-mint-soft hover:opacity-95',
-    border: 'border-accent-mint',
-    bar: 'bg-accent-mint',
-    text: 'text-accent-mint-fg',
-    sub: 'text-ink-secondary',
-  },
-  {
-    bg: 'bg-primary-soft hover:opacity-95',
-    border: 'border-primary',
-    bar: 'bg-primary',
-    text: 'text-primary-fg',
-    sub: 'text-ink-secondary',
-  },
-  {
-    bg: 'bg-accent-amber-soft hover:opacity-95',
-    border: 'border-accent-amber',
-    bar: 'bg-accent-amber',
-    text: 'text-accent-amber-fg',
-    sub: 'text-ink-secondary',
-  },
-  {
-    bg: 'bg-accent-sky-soft hover:opacity-95',
-    border: 'border-accent-sky',
-    bar: 'bg-accent-sky',
-    text: 'text-accent-sky-fg',
-    sub: 'text-ink-secondary',
-  },
-  {
-    bg: 'bg-accent-pink-soft hover:opacity-95',
-    border: 'border-accent-pink',
-    bar: 'bg-accent-pink',
-    text: 'text-accent-pink-fg',
-    sub: 'text-ink-secondary',
-  },
-  {
-    bg: 'bg-status-success-soft hover:opacity-95',
-    border: 'border-status-success',
-    bar: 'bg-status-success',
-    text: 'text-status-success-fg',
-    sub: 'text-ink-secondary',
-  },
-]
-
 const CLEARED_SEMESTER_KEY_PREFIX = 'lsp:cleared_semester:'
 
 export function ClassSchedulePage() {
-  const { user, activeGroup, currentRole, refreshGroupContext } = useAuth()
+  const { user, activeGroup, members, currentRole, refreshGroupContext } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const gcal = useGoogleCalendar()
   const [selectedGcalEvent, setSelectedGcalEvent] = useState<GoogleCalendarEventItem | null>(
     null,
   )
+  const [triggerElement, setTriggerElement] = useState<HTMLElement | null>(null)
 
   const todayCode = useMemo(() => getTodayDayOfWeek(), [])
   const [selectedMobileDay, setSelectedMobileDay] = useState<DayOfWeek>(todayCode)
@@ -222,6 +198,7 @@ export function ClassSchedulePage() {
   const [activeTab, setActiveTab] = useState<'weekly' | 'list'>('weekly')
 
   const [sessions, setSessions] = useState<CourseScheduleItem[]>([])
+  const [tasks, setTasks] = useState<TaskItem[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [saving, setSaving] = useState<boolean>(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -254,20 +231,35 @@ export function ClassSchedulePage() {
     currentRole === 'owner' ||
     currentRole === 'admin' ||
     currentRole === 'member'
+  const isOwnerOrAdmin =
+    !user || currentRole === 'owner' || currentRole === 'admin'
   const canClearSchedule =
     !user || currentRole === 'owner' || currentRole === 'admin'
 
   const groupKeyPart = activeGroup?.id ?? 'local'
   const storageKey = `class_sessions:${groupKeyPart}:${semester}`
+  const tasksStorageKey = activeGroup ? `tasks:${activeGroup.id}` : 'tasks'
 
   const currentSemesterInfo =
     SEMESTER_OPTIONS.find((s) => s.id === semester) ?? SEMESTER_OPTIONS[0]
+
+  const loadTasksForSchedule = useCallback(async () => {
+    try {
+      const taskData = await storage.get<TaskItem[]>(tasksStorageKey)
+      setTasks(taskData ?? [])
+    } catch {
+      // หากโหลดงานไม่สำเร็จ ไม่ให้กระทบการแสดงผลตารางเรียนหลัก
+    }
+  }, [tasksStorageKey])
 
   const loadSchedule = useCallback(async () => {
     setLoading(true)
     setErrorMessage(null)
     try {
-      const data = await storage.get<CourseScheduleItem[]>(storageKey)
+      const [data] = await Promise.all([
+        storage.get<CourseScheduleItem[]>(storageKey),
+        loadTasksForSchedule(),
+      ])
       const list = data ?? []
 
       const wasCleared =
@@ -279,12 +271,26 @@ export function ClassSchedulePage() {
         await storage.set(storageKey, sample)
         setSessions(sample)
       } else {
-        const enriched = list.map((s) => ({
-          ...s,
-          online_url: s.online_url || KNOWN_COURSE_LINKS[s.course_code]?.online_url,
-          contact_url: s.contact_url || KNOWN_COURSE_LINKS[s.course_code]?.contact_url,
-          online_link: s.online_link || Boolean(s.online_url || KNOWN_COURSE_LINKS[s.course_code]?.online_url),
-        }))
+        const enriched = list.map((s) => {
+          const onlineUrl = s.online_url || KNOWN_COURSE_LINKS[s.course_code]?.online_url
+          const contactUrl = s.contact_url || KNOWN_COURSE_LINKS[s.course_code]?.contact_url
+          return {
+            ...s,
+            online_url: onlineUrl,
+            contact_url: contactUrl,
+            online_link: s.online_link || Boolean(onlineUrl),
+            location_text: resolveLocationText(s.room, s.location_text),
+            links:
+              s.links && s.links.length > 0
+                ? s.links
+                : buildDefaultCourseLinks({
+                    course_code: s.course_code,
+                    online_url: onlineUrl,
+                    contact_url: contactUrl,
+                    links: s.links,
+                  }),
+          }
+        })
         const { merged: deduped } = mergeScheduleWithoutDuplicates([], enriched)
         setSessions(deduped)
         if (canEdit && deduped.length < list.length) {
@@ -296,22 +302,208 @@ export function ClassSchedulePage() {
     } finally {
       setLoading(false)
     }
-  }, [storageKey, semester, canEdit, user?.id])
+  }, [storageKey, semester, canEdit, user?.id, loadTasksForSchedule])
 
   useEffect(() => {
     void loadSchedule()
   }, [loadSchedule])
 
+  // แผนผังสีประจำวิชา 8 เฉดสี ไม่ซ้ำกันในตารางเดียวกัน และเคารพสีที่ผู้ใช้ตั้งค่าเอง
   const courseColorMap = useMemo(() => {
-    const map = new Map<string, (typeof COURSE_TOKEN_PALETTE)[number]>()
-    const uniqueCodes = Array.from(
-      new Set(sessions.map((s) => s.course_code.toUpperCase())),
-    )
-    uniqueCodes.forEach((code, idx) => {
-      map.set(code, COURSE_TOKEN_PALETTE[idx % COURSE_TOKEN_PALETTE.length])
-    })
-    return map
+    return buildCourseColorMap(sessions)
   }, [sessions])
+
+  // สรุปจำนวนงานค้างและนัดสอบของแต่ละรหัสวิชา เพื่อแสดงป้ายเล็กบนบล็อกตารางรายสัปดาห์
+  const courseTaskStatsMap = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        pendingWorkCount: number
+        upcomingExamCount: number
+        nextExamTitle: string | null
+        nextExamCountdown: string | null
+      }
+    >()
+
+    for (const t of tasks) {
+      const code = (t.course_code || '').trim().toUpperCase()
+      if (!code || t.status === 'done') continue
+      const prev = map.get(code) ?? {
+        pendingWorkCount: 0,
+        upcomingExamCount: 0,
+        nextExamTitle: null,
+        nextExamCountdown: null,
+      }
+
+      if (t.task_type === 'exam') {
+        prev.upcomingExamCount += 1
+        if (!prev.nextExamTitle) {
+          prev.nextExamTitle = t.title
+          prev.nextExamCountdown = getRelativeCountdownThai(t.due_date).text
+        }
+      } else {
+        prev.pendingWorkCount += 1
+      }
+      map.set(code, prev)
+    }
+
+    return map
+  }, [tasks])
+
+  // ค้นหารายวิชาที่ถูกเปิดป็อปอัพผ่าน query ?course=<id>
+  const selectedCourseParam = (searchParams.get('course') ?? '').trim().toUpperCase()
+  const selectedCourseSessions = useMemo(() => {
+    if (!selectedCourseParam) return []
+    return sessions.filter(
+      (s) =>
+        s.course_code.toUpperCase() === selectedCourseParam ||
+        (s.course_id && s.course_id.toUpperCase() === selectedCourseParam),
+    )
+  }, [sessions, selectedCourseParam])
+  const selectedCourseItem = selectedCourseSessions[0] ?? null
+
+  function handleOpenCoursePopup(
+    item: CourseScheduleItem,
+    e?: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLElement>,
+  ) {
+    if (e?.currentTarget) {
+      setTriggerElement(e.currentTarget)
+    }
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.set('course', item.course_code)
+    // ใช้ push history ปกติ เพื่อให้กดปุ่มย้อนกลับของเบราว์เซอร์แล้วป็อปอัพปิดโดยไม่ออกจากหน้า
+    setSearchParams(nextParams)
+  }
+
+  function handleCloseCoursePopup() {
+    if (!searchParams.has('course')) return
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.delete('course')
+    setSearchParams(nextParams, { replace: true })
+  }
+
+  async function handleSaveCourseDetailsFromDialog(updates: {
+    courseCode: string
+    color: string
+    notes: string
+    locationText: string
+    links: CourseLinkItem[]
+  }) {
+    const updatedList = await saveCourseDetails({
+      storageKey,
+      courseCode: updates.courseCode,
+      color: updates.color,
+      notes: updates.notes,
+      locationText: updates.locationText,
+      links: updates.links,
+      currentSessions: sessions,
+    })
+    setSessions(updatedList)
+    setStatusMessage(`บันทึกรายละเอียดวิชา ${updates.courseCode} เรียบร้อยแล้ว`)
+  }
+
+  async function handleToggleTaskStatusFromDialog(task: TaskItem) {
+    const newStatus: TaskStatus = task.status === 'done' ? 'todo' : 'done'
+    try {
+      if (!user || !supabase) {
+        const updated = tasks.map((t) =>
+          t.id === task.id ? { ...t, status: newStatus } : t,
+        )
+        await localStore.set('tasks', updated)
+        setTasks(updated)
+        return
+      }
+
+      const { error } = await supabase
+        .from('tasks')
+        .update({ status: newStatus })
+        .eq('id', task.id)
+
+      if (error) throw error
+      await loadTasksForSchedule()
+    } catch (err) {
+      setErrorMessage(formatSupabaseErrorThai(err))
+      throw err
+    }
+  }
+
+  async function handleQuickCreateTaskOrExamFromDialog(payload: {
+    title: string
+    task_type: TaskType
+    course_code: string
+    due_date: string | null
+    description: string
+    exam_room: string
+    exam_topics: string
+  }) {
+    if (!isOwnerOrAdmin) return
+    if (!user || !supabase) {
+      const newLocalTask: TaskItem = {
+        id: window.crypto.randomUUID(),
+        title: payload.title,
+        description: '',
+        task_type: payload.task_type,
+        course_code: payload.course_code.toUpperCase(),
+        due_date: payload.due_date,
+        status: 'todo',
+        assignee_ids: [],
+        exam_room: payload.exam_room ?? '',
+        exam_topics: payload.exam_topics ?? '',
+        created_at: new Date().toISOString(),
+      }
+      const updated = [newLocalTask, ...tasks]
+      await localStore.set('tasks', updated)
+      setTasks(updated)
+      setStatusMessage(
+        payload.task_type === 'exam'
+          ? `เพิ่มตารางสอบวิชา ${payload.course_code} เรียบร้อยแล้ว`
+          : `เพิ่มงานวิชา ${payload.course_code} เรียบร้อยแล้ว`,
+      )
+      return
+    }
+
+    if (!activeGroup) {
+      throw new Error('กรุณาสร้างหรือเลือกกลุ่มในหน้า /group ก่อนสร้างงาน')
+    }
+
+    const baseRow = {
+      group_id: activeGroup.id,
+      title: payload.title,
+      description: '',
+      task_type: payload.task_type,
+      course_code: payload.course_code.toUpperCase(),
+      due_date: payload.due_date,
+      status: 'todo' as const,
+      assignee_ids: [user.id],
+      created_by: user.id,
+    }
+
+    const { error } = await supabase.from('tasks').insert({
+      ...baseRow,
+      exam_room: payload.exam_room ?? '',
+      exam_topics: payload.exam_topics ?? '',
+    })
+
+    if (error) {
+      // รองรับกรณีที่ฐานข้อมูลยังไม่ได้รัน migration-course-details.sql
+      if (error.message?.includes('exam_room') || error.message?.includes('column')) {
+        const { error: fallbackErr } = await supabase.from('tasks').insert({
+          ...baseRow,
+          description: [
+            payload.exam_room ? `ห้องสอบ: ${payload.exam_room}` : '',
+            payload.exam_topics ? `หัวข้อที่ออกสอบ: ${payload.exam_topics}` : '',
+          ]
+            .filter(Boolean)
+            .join(' | '),
+        })
+        if (fallbackErr) throw new Error(formatSupabaseErrorThai(fallbackErr))
+      } else {
+        throw new Error(formatSupabaseErrorThai(error))
+      }
+    }
+
+    await loadTasksForSchedule()
+  }
 
   const summaryStats = useMemo(() => {
     const uniqueCourses = new Map<string, number>()
@@ -552,9 +744,55 @@ export function ClassSchedulePage() {
   }
 
   function renderScheduleGrid(daysToShow: DayOfWeek[]) {
+    const allDayByDay = new Map<DayOfWeek, GoogleCalendarEventItem[]>()
+    if (gcal.overlayVisible) {
+      for (const d of daysToShow) {
+        const list = gcal.events.filter((ev) => ev.day === d && ev.isAllDay)
+        if (list.length > 0) {
+          allDayByDay.set(d, list)
+        }
+      }
+    }
+
     return (
       <div className="overflow-x-auto rounded-xl border border-line">
         <div className="min-w-[920px]">
+          {/* แถว "ทั้งวัน" (All-Day) แยกด้านบนสุดของตาราง ไม่ปะปนในแกนเวลา 07:00-20:00 */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-alt/80 px-3 py-2 text-xs">
+            <div className="flex items-center gap-2 font-bold text-ink-secondary">
+              <span className="inline-flex items-center rounded-md border border-line-strong bg-surface px-2 py-0.5 text-[11px] font-extrabold text-primary">
+                📌 ทั้งวัน
+              </span>
+              <span>กิจกรรมตลอดทั้งวัน (แยกจากแกนเวลา 07:00–20:00)</span>
+            </div>
+
+            {allDayByDay.size === 0 ? (
+              <span className="text-[11px] text-ink-muted">
+                ไม่มีกิจกรรมทั้งวันในสัปดาห์นี้
+              </span>
+            ) : (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {daysToShow.map((d) => {
+                  const evs = allDayByDay.get(d) ?? []
+                  return evs.map((ev, idx) => (
+                    <button
+                      key={`allday-top-${d}-${ev.id}-${idx}`}
+                      type="button"
+                      onClick={() => setSelectedGcalEvent(ev)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-accent-sky bg-accent-sky-soft px-2.5 py-1 text-[11px] font-bold text-accent-sky-fg shadow-2xs transition hover:opacity-90"
+                    >
+                      <span className="rounded bg-surface px-1 py-0.2 font-mono text-[10px] text-ink">
+                        {DAY_INFO[d].short}
+                      </span>
+                      <span>📆 {ev.summary}</span>
+                      <span className="text-[10px] opacity-80">(ทั้งวัน)</span>
+                    </button>
+                  ))
+                })}
+              </div>
+            )}
+          </div>
+
           {/* แถวหัวตารางแสดงแกนเวลา 07:00 - 20:00 ด้วย CSS Grid */}
           <div
             className="grid border-b border-line bg-surface-alt text-[11px] font-semibold text-ink-secondary"
@@ -580,15 +818,18 @@ export function ClassSchedulePage() {
           <div className="divide-y divide-line">
             {daysToShow.map((dayCode) => {
               const daySessions = sessions.filter((s) => s.day === dayCode)
-              const dayGcalEvents = gcal.overlayVisible
-                ? gcal.events.filter((ev) => ev.day === dayCode)
+              const dayAllDayEvents = gcal.overlayVisible
+                ? gcal.events.filter((ev) => ev.day === dayCode && ev.isAllDay)
+                : []
+              const dayTimedGcalEvents = gcal.overlayVisible
+                ? gcal.events.filter((ev) => ev.day === dayCode && !ev.isAllDay)
                 : []
               const isToday = dayCode === todayCode
 
               return (
                 <div
                   key={dayCode}
-                  className={`grid min-h-[88px] items-stretch transition-colors ${
+                  className={`grid min-h-[96px] items-stretch transition-colors ${
                     isToday ? 'bg-primary-soft/20' : 'bg-surface hover:bg-surface-hover/60'
                   }`}
                   style={{
@@ -597,182 +838,267 @@ export function ClassSchedulePage() {
                 >
                   {/* คอลัมน์ชื่อวัน + ไฮไลต์วันนี้ */}
                   <div
-                    className={`sticky left-0 z-10 flex items-center gap-2 border-r border-line px-3 py-2 ${
+                    className={`sticky left-0 z-10 flex flex-col justify-center gap-1 border-r border-line px-3 py-2 ${
                       isToday ? 'bg-primary-soft/60' : 'bg-surface-alt'
                     }`}
                   >
-                    <span
-                      className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-extrabold ${DAY_INFO[dayCode].badgeClass}`}
-                    >
-                      {DAY_INFO[dayCode].singleCode}
-                    </span>
-                    <div>
-                      <div className="flex items-center gap-1 text-xs font-bold text-ink">
-                        <span>{DAY_INFO[dayCode].full}</span>
-                      </div>
-                      <div className="font-mono text-[10px] text-ink-muted">
-                        {isToday ? '● วันนี้' : dayCode}
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-extrabold ${DAY_INFO[dayCode].badgeClass}`}
+                      >
+                        {DAY_INFO[dayCode].singleCode}
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-1 text-xs font-bold text-ink">
+                          <span>{DAY_INFO[dayCode].full}</span>
+                        </div>
+                        <div className="font-mono text-[10px] text-ink-muted">
+                          {isToday ? '● วันนี้' : dayCode}
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* พื้นที่ CSS Grid 26 ช่อง (07:00 - 20:00 ช่องละ 30 นาที) */}
+                  {/* พื้นที่ด้านขวา: แถบ "ทั้งวัน" ของวันนั้น (ถ้ามี) + พื้นที่ CSS Grid 26 ช่อง (07:00 - 20:00) */}
                   <div
-                    className="relative grid items-center gap-y-1 py-1.5"
+                    className="flex flex-col justify-center"
                     style={{
                       gridColumn: `2 / span ${TOTAL_HALF_HOUR_SLOTS}`,
-                      gridTemplateColumns: `repeat(${TOTAL_HALF_HOUR_SLOTS}, minmax(0, 1fr))`,
                     }}
                   >
-                    {/* เส้นเวลาปัจจุบัน (แสดงเฉพาะเมื่ออยู่ในช่วง 07:00-20:00) */}
-                    {currentTimeLinePercent !== null && (
-                      <div
-                        aria-hidden="true"
-                        style={{ left: `${currentTimeLinePercent}%` }}
-                        className="pointer-events-none absolute top-0 bottom-0 z-20 w-0.5 bg-status-danger"
-                      />
+                    {dayAllDayEvents.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 border-b border-dashed border-line bg-surface-alt/60 px-2 py-1 text-[11px]">
+                        <span className="rounded bg-surface px-1.5 py-0.5 font-bold text-ink-secondary">
+                          📌 ทั้งวัน:
+                        </span>
+                        {dayAllDayEvents.map((ev, aIdx) => (
+                          <button
+                            key={`day-allday-${dayCode}-${ev.id}-${aIdx}`}
+                            type="button"
+                            onClick={() => setSelectedGcalEvent(ev)}
+                            className="inline-flex items-center gap-1 rounded-md border border-accent-sky bg-accent-sky-soft px-2 py-0.5 font-bold text-accent-sky-fg hover:opacity-90"
+                          >
+                            <span>📆 {ev.summary}</span>
+                          </button>
+                        ))}
+                      </div>
                     )}
 
-                    {/* เส้นแบ่งชั่วโมงพื้นหลัง */}
-                    {Array.from({ length: 13 }).map((_, hIdx) => (
-                      <div
-                        key={`line-${dayCode}-${hIdx}`}
-                        style={{
-                          gridColumn: `${hIdx * 2 + 1} / span 2`,
-                          gridRow: '1 / span 2',
-                        }}
-                        className="pointer-events-none h-full border-r border-dashed border-line"
-                      />
-                    ))}
-
-                    {/* กล่องรายวิชาที่วางตามตำแหน่งเวลาบน CSS Grid */}
-                    {daySessions.map((sess, sIdx) => {
-                      const startMin = Math.max(
-                        GRID_START_MIN,
-                        Math.min(GRID_END_MIN - 30, timeToMinutes(sess.start)),
-                      )
-                      const endMin = Math.max(
-                        startMin + 30,
-                        Math.min(GRID_END_MIN, timeToMinutes(sess.end)),
-                      )
-
-                      const startSlot =
-                        Math.floor((startMin - GRID_START_MIN) / 30) + 1
-                      const spanSlots = Math.max(
-                        1,
-                        Math.ceil((endMin - startMin) / 30),
-                      )
-
-                      const colorTheme =
-                        courseColorMap.get(sess.course_code.toUpperCase()) ??
-                        COURSE_TOKEN_PALETTE[0]
-
-                      return (
+                    <div
+                      className="relative grid flex-1 items-center gap-y-1 py-1.5"
+                      style={{
+                        gridTemplateColumns: `repeat(${TOTAL_HALF_HOUR_SLOTS}, minmax(0, 1fr))`,
+                      }}
+                    >
+                      {/* เส้นเวลาปัจจุบัน (แสดงเฉพาะเมื่ออยู่ในช่วง 07:00-20:00) */}
+                      {currentTimeLinePercent !== null && (
                         <div
-                          key={`${sess.course_code}-${sess.day}-${sess.start}-${sIdx}`}
-                          style={{
-                            gridColumn: `${startSlot} / span ${spanSlots}`,
-                            gridRow: 1,
-                          }}
-                          onClick={() => handleSelectForEdit(sess)}
-                          title={`${sess.course_code} ${sess.course_name} (${sess.start}-${sess.end}) ห้อง ${sess.room}`}
-                          className={`z-10 mx-0.5 flex flex-col justify-between rounded-xl border-l-4 p-2 text-xs shadow-2xs transition ${colorTheme.bg} ${colorTheme.border} ${colorTheme.text} ${
-                            canEdit ? 'cursor-pointer' : ''
-                          }`}
-                        >
-                          <div>
-                            <div className="flex flex-wrap items-center justify-between gap-1">
-                              <span className="font-mono text-xs font-extrabold">
-                                {sess.course_code}
-                              </span>
-                              {sess.online_link && (
-                                <span className="rounded bg-surface px-1.5 py-0.2 text-[10px] font-bold text-accent-mint">
-                                  มีเรียนออนไลน์
-                                </span>
-                              )}
-                            </div>
-                            <p className="mt-0.5 line-clamp-1 font-bold leading-snug">
-                              {sess.course_name}
-                            </p>
-                          </div>
+                          aria-hidden="true"
+                          style={{ left: `${currentTimeLinePercent}%` }}
+                          className="pointer-events-none absolute top-0 bottom-0 z-20 w-0.5 bg-status-danger"
+                        />
+                      )}
 
+                      {/* เส้นแบ่งชั่วโมงพื้นหลัง */}
+                      {Array.from({ length: 13 }).map((_, hIdx) => (
+                        <div
+                          key={`line-${dayCode}-${hIdx}`}
+                          style={{
+                            gridColumn: `${hIdx * 2 + 1} / span 2`,
+                            gridRow: '1 / span 2',
+                          }}
+                          className="pointer-events-none h-full border-r border-dashed border-line"
+                        />
+                      ))}
+
+                      {/* กล่องรายวิชาที่วางตามตำแหน่งเวลาบน CSS Grid */}
+                      {daySessions.map((sess, sIdx) => {
+                        const startMin = Math.max(
+                          GRID_START_MIN,
+                          Math.min(GRID_END_MIN - 30, timeToMinutes(sess.start)),
+                        )
+                        const endMin = Math.max(
+                          startMin + 30,
+                          Math.min(GRID_END_MIN, timeToMinutes(sess.end)),
+                        )
+
+                        const startSlot =
+                          Math.floor((startMin - GRID_START_MIN) / 30) + 1
+                        const spanSlots = Math.max(
+                          1,
+                          Math.ceil((endMin - startMin) / 30),
+                        )
+
+                        const colorTheme =
+                          courseColorMap.get(sess.course_code.toUpperCase()) ??
+                          COURSE_COLOR_PALETTE[0]
+                        const courseStats = courseTaskStatsMap.get(
+                          sess.course_code.toUpperCase(),
+                        )
+                        const fullLocation = resolveLocationText(
+                          sess.room,
+                          sess.location_text,
+                        )
+                        const tooltipSummary = `${sess.course_code} ${sess.course_name} • เวลา ${sess.start}–${sess.end} น. • ห้อง ${fullLocation}`
+
+                        return (
                           <div
-                            className={`mt-1 flex flex-wrap items-center justify-between gap-1 text-[11px] font-medium ${colorTheme.sub}`}
+                            key={`${sess.course_code}-${sess.day}-${sess.start}-${sIdx}`}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`เปิดรายละเอียดวิชา ${sess.course_code} ${sess.course_name}`}
+                            style={{
+                              gridColumn: `${startSlot} / span ${spanSlots}`,
+                              gridRow: 1,
+                            }}
+                            onClick={(e) => handleOpenCoursePopup(sess, e)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                handleOpenCoursePopup(sess, e)
+                              }
+                            }}
+                            title={tooltipSummary}
+                            className={`group relative z-10 mx-0.5 flex cursor-pointer flex-col justify-between rounded-xl border-l-4 p-2 text-xs shadow-2xs transition focus:ring-2 focus:ring-primary focus:outline-none ${colorTheme.bg} ${colorTheme.border} ${colorTheme.text}`}
                           >
-                            <span>📍 {sess.room || '-'}</span>
-                            <span className="font-mono">
-                              {sess.start}–{sess.end}
-                            </span>
-                          </div>
-
-                          {(sess.online_url || sess.contact_url) && (
-                            <div className="mt-1 flex flex-wrap items-center gap-1">
-                              {sess.online_url && (
-                                <a
-                                  href={sess.online_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center gap-0.5 rounded bg-surface px-1 py-0.5 text-[9px] font-bold text-accent-pink shadow-2xs hover:underline"
-                                >
-                                  🔗 Meet
-                                </a>
-                              )}
-                              {sess.contact_url && (
-                                <a
-                                  href={sess.contact_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center gap-0.5 rounded bg-surface px-1 py-0.5 text-[9px] font-bold text-status-success shadow-2xs hover:underline"
-                                >
-                                  💬 LINE
-                                </a>
-                              )}
+                            {/* Tooltip บนคอมพิวเตอร์เมื่อชื่อวิชาถูกตัด: แสดงชื่อเต็ม ห้องเต็ม และเวลาเรียน */}
+                            <div
+                              role="tooltip"
+                              className="pointer-events-none invisible absolute bottom-full left-1/2 z-40 mb-1.5 hidden w-64 -translate-x-1/2 rounded-xl border border-line-strong bg-surface p-2.5 text-left text-[11px] text-ink shadow-lg group-hover:visible group-focus-within:visible sm:block"
+                            >
+                              <div className="font-mono text-xs font-extrabold text-primary">
+                                {sess.course_code} (Sec {sess.section})
+                              </div>
+                              <div className="mt-0.5 font-bold text-ink">
+                                {sess.course_name}
+                              </div>
+                              <div className="mt-1 text-ink-secondary">
+                                ⏰ เวลา {sess.start}–{sess.end} น.
+                              </div>
+                              <div className="mt-0.5 text-ink-secondary">
+                                📍 {fullLocation}
+                              </div>
                             </div>
-                          )}
-                        </div>
-                      )
-                    })}
 
-                    {/* กล่องอีเวนต์ Google Calendar ที่ซ้อนทับแบบอ่านอย่างเดียว (แถวที่ 2 ในวันเดียวกัน) */}
-                    {dayGcalEvents.map((ev, gIdx) => {
-                      const startMin = Math.max(
-                        GRID_START_MIN,
-                        Math.min(GRID_END_MIN - 30, timeToMinutes(ev.startTime)),
-                      )
-                      const endMin = Math.max(
-                        startMin + 30,
-                        Math.min(GRID_END_MIN, timeToMinutes(ev.endTime)),
-                      )
+                            <div>
+                              <div className="flex flex-wrap items-center justify-between gap-1">
+                                <span className="font-mono text-xs font-extrabold">
+                                  {sess.course_code}
+                                </span>
+                                {sess.online_link && (
+                                  <span className="rounded bg-surface px-1.5 py-0.2 text-[10px] font-bold text-accent-mint">
+                                    มีเรียนออนไลน์
+                                  </span>
+                                )}
+                              </div>
+                              <p className="mt-0.5 line-clamp-1 font-bold leading-snug">
+                                {sess.course_name}
+                              </p>
+                            </div>
 
-                      const startSlot =
-                        Math.floor((startMin - GRID_START_MIN) / 30) + 1
-                      const spanSlots = Math.max(
-                        1,
-                        Math.ceil((endMin - startMin) / 30),
-                      )
+                            <div
+                              className={`mt-1 flex flex-wrap items-center justify-between gap-1 text-[11px] font-medium ${colorTheme.sub}`}
+                            >
+                              <span>📍 {sess.room || '-'}</span>
+                              <span className="font-mono">
+                                {sess.start}–{sess.end}
+                              </span>
+                            </div>
 
-                      return (
-                        <div
-                          key={`gcal-${ev.id}-${gIdx}`}
-                          style={{
-                            gridColumn: `${startSlot} / span ${spanSlots}`,
-                            gridRow: 2,
-                          }}
-                          onClick={() => setSelectedGcalEvent(ev)}
-                          title={`[Google Calendar] ${ev.summary} (${ev.isAllDay ? 'ทั้งวัน' : `${ev.startTime}-${ev.endTime}`}) — คลิกเพื่อดูหรือแก้ไขใน Google Calendar`}
-                          className="z-10 mx-0.5 cursor-pointer rounded-xl border border-dashed border-accent-sky bg-accent-sky-soft/75 p-1.5 text-[11px] text-accent-sky-fg shadow-2xs transition hover:opacity-95"
-                        >
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="font-bold">📆 {ev.summary}</span>
-                            <span className="font-mono text-[10px]">
-                              {ev.isAllDay ? 'ทั้งวัน' : `${ev.startTime}–${ev.endTime}`}
-                            </span>
+                            {/* ป้ายเล็กแสดงจำนวนงานค้างและนัดสอบของวิชานี้ (ไอคอน + ข้อความ ไม่พึ่งสีอย่างเดียว) */}
+                            {courseStats &&
+                              (courseStats.pendingWorkCount > 0 ||
+                                courseStats.upcomingExamCount > 0) && (
+                                <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                                  {courseStats.pendingWorkCount > 0 && (
+                                    <span className="inline-flex items-center gap-0.5 rounded-md border border-status-warning bg-status-warning-soft px-1.5 py-0.5 text-[10px] font-bold text-status-warning-fg">
+                                      <span>📝</span>
+                                      <span>{courseStats.pendingWorkCount} งานค้าง</span>
+                                    </span>
+                                  )}
+                                  {courseStats.upcomingExamCount > 0 && (
+                                    <span className="inline-flex items-center gap-0.5 rounded-md border border-accent-pink bg-accent-pink-soft px-1.5 py-0.5 text-[10px] font-bold text-accent-pink-fg">
+                                      <span>🎯</span>
+                                      <span>
+                                        สอบ
+                                        {courseStats.nextExamCountdown
+                                          ? ` (${courseStats.nextExamCountdown})`
+                                          : ''}
+                                      </span>
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+
+                            {(sess.online_url || sess.contact_url) && (
+                              <div className="mt-1 flex flex-wrap items-center gap-1">
+                                {sess.online_url && (
+                                  <a
+                                    href={sess.online_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="inline-flex items-center gap-0.5 rounded bg-surface px-1 py-0.5 text-[9px] font-bold text-accent-pink shadow-2xs hover:underline"
+                                  >
+                                    🔗 Meet
+                                  </a>
+                                )}
+                                {sess.contact_url && (
+                                  <a
+                                    href={sess.contact_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="inline-flex items-center gap-0.5 rounded bg-surface px-1 py-0.5 text-[9px] font-bold text-status-success shadow-2xs hover:underline"
+                                  >
+                                    💬 LINE
+                                  </a>
+                                )}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+
+                      {/* กล่องอีเวนต์ Google Calendar ที่มีเวลาแน่นอน (ไม่รวมทั้งวัน) บนแกนเวลา */}
+                      {dayTimedGcalEvents.map((ev, gIdx) => {
+                        const startMin = Math.max(
+                          GRID_START_MIN,
+                          Math.min(GRID_END_MIN - 30, timeToMinutes(ev.startTime)),
+                        )
+                        const endMin = Math.max(
+                          startMin + 30,
+                          Math.min(GRID_END_MIN, timeToMinutes(ev.endTime)),
+                        )
+
+                        const startSlot =
+                          Math.floor((startMin - GRID_START_MIN) / 30) + 1
+                        const spanSlots = Math.max(
+                          1,
+                          Math.ceil((endMin - startMin) / 30),
+                        )
+
+                        return (
+                          <div
+                            key={`gcal-${ev.id}-${gIdx}`}
+                            style={{
+                              gridColumn: `${startSlot} / span ${spanSlots}`,
+                              gridRow: 2,
+                            }}
+                            onClick={() => setSelectedGcalEvent(ev)}
+                            title={`[Google Calendar] ${ev.summary} (${ev.startTime}-${ev.endTime}) — คลิกเพื่อดูหรือแก้ไขใน Google Calendar`}
+                            className="z-10 mx-0.5 cursor-pointer rounded-xl border border-dashed border-accent-sky bg-accent-sky-soft/75 p-1.5 text-[11px] text-accent-sky-fg shadow-2xs transition hover:opacity-95"
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="font-bold">📆 {ev.summary}</span>
+                              <span className="font-mono text-[10px]">
+                                {ev.startTime}–{ev.endTime}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
               )
@@ -1173,6 +1499,34 @@ export function ClassSchedulePage() {
         )}
       </Card>
 
+      {/* ป็อปอัพรายละเอียดวิชา (CourseDialog) เปิดผ่าน ?course=<id> */}
+      <CourseDialog
+        open={Boolean(selectedCourseItem)}
+        courseCode={selectedCourseItem ? selectedCourseItem.course_code : null}
+        sessions={selectedCourseSessions}
+        semesterLabel={currentSemesterInfo.label}
+        colorTheme={
+          selectedCourseItem
+            ? (courseColorMap.get(selectedCourseItem.course_code.toUpperCase()) ??
+              COURSE_COLOR_PALETTE[0])
+            : COURSE_COLOR_PALETTE[0]
+        }
+        tasks={tasks}
+        members={members}
+        canEditCourse={canEdit}
+        canCreateTaskOrExam={isOwnerOrAdmin}
+        canToggleTask={(t) =>
+          isOwnerOrAdmin ||
+          Boolean(user && currentRole === 'member' && t.assignee_ids?.includes(user.id))
+        }
+        isReadOnlyViewer={isLoggedInViewer}
+        triggerElement={triggerElement}
+        onClose={handleCloseCoursePopup}
+        onSaveCourseDetails={handleSaveCourseDetailsFromDialog}
+        onToggleTaskStatus={handleToggleTaskStatusFromDialog}
+        onQuickCreateTaskOrExam={handleQuickCreateTaskOrExamFromDialog}
+      />
+
       {/* กล่องแสดงรายละเอียดอีเวนต์ Google Calendar + ปุ่มแก้ไขใน Google Calendar */}
       <GoogleCalendarEventModal
         event={selectedGcalEvent}
@@ -1201,7 +1555,7 @@ export function ClassSchedulePage() {
                 ตารางเรียนรายสัปดาห์ (เวลา 07:00–20:00)
               </h2>
               <p className="text-xs text-ink-muted">
-                มือถือแสดงทีละวัน • แท็บเล็ตแสดง 5 วันทำการ • คอมพิวเตอร์แสดงครบ 7 วัน พร้อมเส้นเวลาปัจจุบันสีแดง
+                คลิกที่บล็อกวิชาเพื่อเปิดป็อปอัพรายวิชา • มือถือแสดงทีละวัน • แท็บเล็ตแสดง 5 วันทำการ • คอมพิวเตอร์แสดงครบ 7 วัน
               </p>
             </div>
             <Badge tone="mint">● วันนี้: วัน{DAY_INFO[todayCode].full}</Badge>
@@ -1247,6 +1601,33 @@ export function ClassSchedulePage() {
                 </span>
               </div>
 
+              {/* แถว "ทั้งวัน" ด้านบนสุดของวันบนมือถือ */}
+              {gcal.overlayVisible &&
+                gcal.events.some(
+                  (ev) => ev.day === selectedMobileDay && ev.isAllDay,
+                ) && (
+                  <div className="rounded-xl border border-line bg-surface-alt p-3">
+                    <div className="text-xs font-extrabold text-primary">
+                      📌 ทั้งวัน (กิจกรรมตลอดทั้งวัน)
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {gcal.events
+                        .filter((ev) => ev.day === selectedMobileDay && ev.isAllDay)
+                        .map((ev, gIdx) => (
+                          <button
+                            key={`mob-allday-${ev.id}-${gIdx}`}
+                            type="button"
+                            onClick={() => setSelectedGcalEvent(ev)}
+                            className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl border border-accent-sky bg-accent-sky-soft px-3 py-1.5 text-xs font-bold text-accent-sky-fg"
+                          >
+                            <span>📆 {ev.summary}</span>
+                            <span className="text-[10px] opacity-80">(ทั้งวัน)</span>
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
               {sessions.filter((s) => s.day === selectedMobileDay).length === 0 ? (
                 <EmptyState
                   mood="sleep"
@@ -1260,12 +1641,23 @@ export function ClassSchedulePage() {
                   .map((sess, idx) => {
                     const colorTheme =
                       courseColorMap.get(sess.course_code.toUpperCase()) ??
-                      COURSE_TOKEN_PALETTE[0]
+                      COURSE_COLOR_PALETTE[0]
+                    const courseStats = courseTaskStatsMap.get(
+                      sess.course_code.toUpperCase(),
+                    )
                     return (
                       <div
                         key={`mob-card-${sess.course_code}-${idx}`}
-                        onClick={() => handleSelectForEdit(sess)}
-                        className={`rounded-xl border-l-4 p-4 shadow-2xs ${colorTheme.bg} ${colorTheme.border} ${colorTheme.text}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => handleOpenCoursePopup(sess, e)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            handleOpenCoursePopup(sess, e)
+                          }
+                        }}
+                        className={`cursor-pointer rounded-xl border-l-4 p-4 shadow-2xs transition focus:ring-2 focus:ring-primary focus:outline-none ${colorTheme.bg} ${colorTheme.border} ${colorTheme.text}`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-mono text-sm font-extrabold">
@@ -1282,6 +1674,30 @@ export function ClassSchedulePage() {
                             <Badge tone="mint">มีเรียนออนไลน์</Badge>
                           )}
                         </div>
+
+                        {courseStats &&
+                          (courseStats.pendingWorkCount > 0 ||
+                            courseStats.upcomingExamCount > 0) && (
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                              {courseStats.pendingWorkCount > 0 && (
+                                <span className="inline-flex items-center gap-1 rounded-md border border-status-warning bg-status-warning-soft px-2 py-0.5 text-[11px] font-bold text-status-warning-fg">
+                                  <span>📝</span>
+                                  <span>{courseStats.pendingWorkCount} งานค้าง</span>
+                                </span>
+                              )}
+                              {courseStats.upcomingExamCount > 0 && (
+                                <span className="inline-flex items-center gap-1 rounded-md border border-accent-pink bg-accent-pink-soft px-2 py-0.5 text-[11px] font-bold text-accent-pink-fg">
+                                  <span>🎯</span>
+                                  <span>
+                                    สอบ
+                                    {courseStats.nextExamCountdown
+                                      ? ` (${courseStats.nextExamCountdown})`
+                                      : ''}
+                                  </span>
+                                </span>
+                              )}
+                            </div>
+                          )}
 
                         {(sess.online_url || sess.contact_url) && (
                           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line/40 pt-2.5">
@@ -1316,10 +1732,10 @@ export function ClassSchedulePage() {
                   })
               )}
 
-              {/* อีเวนต์จาก Google Calendar ของวันที่เลือกบนมือถือ */}
+              {/* อีเวนต์ที่มีเวลาจาก Google Calendar ของวันที่เลือกบนมือถือ */}
               {gcal.overlayVisible &&
                 gcal.events
-                  .filter((ev) => ev.day === selectedMobileDay)
+                  .filter((ev) => ev.day === selectedMobileDay && !ev.isAllDay)
                   .map((ev, gIdx) => (
                     <div
                       key={`mob-gcal-${ev.id}-${gIdx}`}
@@ -1329,7 +1745,7 @@ export function ClassSchedulePage() {
                       <div className="flex items-center justify-between gap-2">
                         <Badge tone="sky">📆 Google Calendar</Badge>
                         <span className="font-mono text-xs font-bold">
-                          {ev.isAllDay ? 'ตลอดทั้งวัน' : `${ev.startTime} – ${ev.endTime}`}
+                          {ev.startTime} – {ev.endTime}
                         </span>
                       </div>
                       <p className="mt-1.5 text-sm font-bold text-ink">{ev.summary}</p>
@@ -1363,8 +1779,11 @@ export function ClassSchedulePage() {
       ) : (
         /* มุมมองที่ 2: ตารางรายวิชาที่ลงทะเบียน */
         <Card padding="none" className="overflow-hidden">
-          <div className="bg-accent-amber px-5 py-3 text-sm font-bold text-ink-inverted">
-            📖 ช่วงเรียนปกติ ({currentSemesterInfo.period})
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-accent-amber px-5 py-3 text-sm font-bold text-ink-inverted">
+            <span>📖 ช่วงเรียนปกติ ({currentSemesterInfo.period})</span>
+            <span className="text-xs font-normal opacity-90">
+              คลิกที่แถววิชาเพื่อเปิดป็อปอัพรายละเอียดวิชา ลิงก์เรียนออนไลน์ งานค้าง และนัดสอบ
+            </span>
           </div>
 
           {sessions.length === 0 ? (
@@ -1398,9 +1817,13 @@ export function ClassSchedulePage() {
                   {sessions.map((s, idx) => {
                     const colorTheme =
                       courseColorMap.get(s.course_code.toUpperCase()) ??
-                      COURSE_TOKEN_PALETTE[0]
+                      COURSE_COLOR_PALETTE[0]
+                    const courseStats = courseTaskStatsMap.get(
+                      s.course_code.toUpperCase(),
+                    )
                     const dayMeta = DAY_INFO[s.day] ?? DAY_INFO.MON
-                    const roomDetail = getBuildingRoomDetail(s.room)
+                    const roomDetail =
+                      s.location_text || getBuildingRoomDetail(s.room)
                     const instructorText = s.instructor
                       ? s.instructor.startsWith('อาจารย์')
                         ? s.instructor
@@ -1410,20 +1833,33 @@ export function ClassSchedulePage() {
                     return (
                       <tr
                         key={`row-${s.course_code}-${s.day}-${s.start}-${idx}`}
-                        onClick={() => handleSelectForEdit(s)}
-                        className={`transition hover:bg-surface-hover ${
-                          canEdit ? 'cursor-pointer' : ''
-                        }`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => handleOpenCoursePopup(s, e)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            handleOpenCoursePopup(s, e)
+                          }
+                        }}
+                        className="cursor-pointer transition hover:bg-surface-hover focus:bg-surface-hover focus:outline-none"
                       >
                         <td className="py-4 pl-5 pr-2 font-mono text-ink-muted">
                           {idx + 1}.
                         </td>
                         <td className="py-4 px-3">
                           <div className="flex items-stretch gap-2.5">
-                            <span className={`w-1 shrink-0 rounded-full ${colorTheme.bar}`} />
+                            <span className={`w-1.5 shrink-0 rounded-full ${colorTheme.bar}`} />
                             <div>
-                              <div className="font-mono text-xs font-extrabold text-accent-pink">
-                                {s.course_code}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className={`font-mono text-xs font-extrabold ${colorTheme.text}`}>
+                                  {s.course_code}
+                                </span>
+                                {courseStats && courseStats.pendingWorkCount > 0 && (
+                                  <Badge tone="warning">
+                                    📝 {courseStats.pendingWorkCount} งานค้าง
+                                  </Badge>
+                                )}
                               </div>
                               <div className="mt-0.5 text-sm font-bold text-ink">
                                 {s.course_name}
@@ -1499,21 +1935,40 @@ export function ClassSchedulePage() {
                           )}
                         </td>
                         <td className="py-4 px-3 text-center">
-                          <Badge tone="neutral">ไม่จัดสอบ</Badge>
+                          {courseStats && courseStats.upcomingExamCount > 0 ? (
+                            <Badge tone="pink">
+                              🎯 มีสอบ ({courseStats.upcomingExamCount})
+                            </Badge>
+                          ) : (
+                            <Badge tone="neutral">ไม่จัดสอบ</Badge>
+                          )}
                         </td>
                         {canEdit && (
                           <td className="py-4 pr-5 text-center whitespace-nowrap">
-                            <button
-                              type="button"
-                              title="ลบรายวิชานี้"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                void handleDeleteSingleSession(s)
-                              }}
-                              className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-status-danger transition hover:bg-status-danger-soft"
-                            >
-                              🗑️ ลบ
-                            </button>
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                title="แก้ไขวัน/เวลาคาบเรียน"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleSelectForEdit(s)
+                                }}
+                                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-primary transition hover:bg-primary-soft"
+                              >
+                                ✏️ แก้คาบ
+                              </button>
+                              <button
+                                type="button"
+                                title="ลบรายวิชานี้"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  void handleDeleteSingleSession(s)
+                                }}
+                                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-status-danger transition hover:bg-status-danger-soft"
+                              >
+                                🗑️ ลบ
+                              </button>
+                            </div>
                           </td>
                         )}
                       </tr>

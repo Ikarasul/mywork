@@ -51,6 +51,18 @@ html.theme-light {
   --color-accent-mint-soft: rgb(209 250 229);
   --color-accent-mint-fg: rgb(6 78 59);
 
+  --color-accent-violet: rgb(124 58 237);
+  --color-accent-violet-soft: rgb(237 233 254);
+  --color-accent-violet-fg: rgb(76 29 149);
+
+  --color-accent-teal: rgb(13 148 136);
+  --color-accent-teal-soft: rgb(204 251 241);
+  --color-accent-teal-fg: rgb(19 78 74);
+
+  --color-accent-rose: rgb(225 29 72);
+  --color-accent-rose-soft: rgb(255 228 230);
+  --color-accent-rose-fg: rgb(136 19 55);
+
   /* สีสถานะ: สำเร็จ / เตือน / อันตราย */
   --color-success: rgb(5 150 105);
   --color-success-soft: rgb(209 250 229);
@@ -117,6 +129,18 @@ html.theme-dark {
   --color-accent-mint-soft: rgb(6 78 59 / 0.5);
   --color-accent-mint-fg: rgb(209 250 229);
 
+  --color-accent-violet: rgb(192 132 252);
+  --color-accent-violet-soft: rgb(88 28 135 / 0.5);
+  --color-accent-violet-fg: rgb(243 232 255);
+
+  --color-accent-teal: rgb(45 212 191);
+  --color-accent-teal-soft: rgb(19 78 74 / 0.55);
+  --color-accent-teal-fg: rgb(204 251 241);
+
+  --color-accent-rose: rgb(251 113 133);
+  --color-accent-rose-soft: rgb(136 19 55 / 0.5);
+  --color-accent-rose-fg: rgb(255 228 230);
+
   --color-success: rgb(52 211 153);
   --color-success-soft: rgb(6 78 59 / 0.55);
   --color-success-fg: rgb(209 250 229);
@@ -180,6 +204,18 @@ html.theme-oled {
   --color-accent-mint: rgb(45 235 170);
   --color-accent-mint-soft: rgb(6 72 52 / 0.65);
   --color-accent-mint-fg: rgb(236 253 245);
+
+  --color-accent-violet: rgb(216 180 254);
+  --color-accent-violet-soft: rgb(76 29 149 / 0.65);
+  --color-accent-violet-fg: rgb(250 245 255);
+
+  --color-accent-teal: rgb(94 234 212);
+  --color-accent-teal-soft: rgb(17 94 89 / 0.65);
+  --color-accent-teal-fg: rgb(240 253 250);
+
+  --color-accent-rose: rgb(255 128 148);
+  --color-accent-rose-soft: rgb(120 16 48 / 0.65);
+  --color-accent-rose-fg: rgb(255 241 242);
 
   --color-success: rgb(45 235 170);
   --color-success-soft: rgb(6 72 52 / 0.65);

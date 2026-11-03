@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   Badge,
   Button,
@@ -9,7 +9,7 @@ import {
   Toast,
 } from '../components/ui'
 import { formatSupabaseErrorThai, useAuth } from '../lib/auth'
-import { formatDateTimeThai } from '../lib/dateThai'
+import { formatDateTimeThai, getRelativeCountdownThai } from '../lib/dateThai'
 import { formatStorageErrorThai, localStore, storage } from '../lib/storage'
 import { supabase } from '../lib/supabase'
 import type { TaskItem, TaskStatus, TaskType } from '../types'
@@ -34,6 +34,7 @@ const STATUS_META: Record<
 
 export function TasksPage() {
   const { user, activeGroup, members, currentRole } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [tasks, setTasks] = useState<TaskItem[]>([])
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -46,10 +47,32 @@ export function TasksPage() {
   const [taskType, setTaskType] = useState<TaskType>('homework')
   const [courseCode, setCourseCode] = useState('')
   const [dueDate, setDueDate] = useState('')
+  const [examRoom, setExamRoom] = useState('')
+  const [examTopics, setExamTopics] = useState('')
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([])
 
   const isLoggedInViewer = Boolean(user && currentRole === 'viewer')
   const isOwnerOrAdmin = !user || currentRole === 'owner' || currentRole === 'admin'
+
+  const filterCourseParam = (searchParams.get('course') ?? '').trim().toUpperCase()
+  const prefillTypeParam = searchParams.get('type') as TaskType | null
+
+  // เมื่อเปิดมาจากป็อปอัพรายวิชา (?course=<code>&type=<homework|exam>) ให้เลือกวิชานั้นให้อัตโนมัติ
+  useEffect(() => {
+    if (filterCourseParam) {
+      setCourseCode(filterCourseParam)
+      if (
+        prefillTypeParam === 'homework' ||
+        prefillTypeParam === 'work' ||
+        prefillTypeParam === 'exam'
+      ) {
+        setTaskType(prefillTypeParam)
+      }
+      if (isOwnerOrAdmin) {
+        setShowCreateForm(true)
+      }
+    }
+  }, [filterCourseParam, prefillTypeParam, isOwnerOrAdmin])
 
   const storageKey = activeGroup ? `tasks:${activeGroup.id}` : 'tasks'
 
@@ -119,6 +142,8 @@ export function TasksPage() {
           due_date: dueDate ? new Date(dueDate).toISOString() : null,
           status: 'todo',
           assignee_ids: [],
+          exam_room: taskType === 'exam' ? examRoom.trim() : '',
+          exam_topics: taskType === 'exam' ? examTopics.trim() : '',
           created_at: new Date().toISOString(),
         }
         const updated = [newLocalTask, ...tasks]
@@ -131,26 +156,43 @@ export function TasksPage() {
         const assignees =
           selectedAssignees.length > 0 ? selectedAssignees : [user.id]
 
-        const { error } = await supabase.from('tasks').insert({
+        const baseInsert = {
           group_id: activeGroup.id,
           title: title.trim(),
           description: description.trim(),
           task_type: taskType,
           course_code: courseCode.trim().toUpperCase(),
           due_date: dueDate ? new Date(dueDate).toISOString() : null,
-          status: 'todo',
+          status: 'todo' as const,
           assignee_ids: assignees,
           created_by: user.id,
+        }
+
+        const { error } = await supabase.from('tasks').insert({
+          ...baseInsert,
+          exam_room: taskType === 'exam' ? examRoom.trim() : '',
+          exam_topics: taskType === 'exam' ? examTopics.trim() : '',
         })
 
-        if (error) throw error
+        if (error) {
+          if (error.message?.includes('exam_room') || error.message?.includes('column')) {
+            const { error: fallbackError } = await supabase
+              .from('tasks')
+              .insert(baseInsert)
+            if (fallbackError) throw fallbackError
+          } else {
+            throw error
+          }
+        }
         await loadTasks()
       }
 
       setTitle('')
       setDescription('')
-      setCourseCode('')
+      setCourseCode(filterCourseParam || '')
       setDueDate('')
+      setExamRoom('')
+      setExamTopics('')
       setSelectedAssignees([])
       setShowCreateForm(false)
     } catch (err) {
@@ -234,6 +276,12 @@ export function TasksPage() {
     memberNameMap.set(m.user_id, m.display_name)
   }
 
+  const filteredTasks = filterCourseParam
+    ? tasks.filter(
+        (t) => (t.course_code || '').trim().toUpperCase() === filterCourseParam,
+      )
+    : tasks
+
   return (
     <div className="space-y-6">
       <Card>
@@ -241,22 +289,36 @@ export function TasksPage() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold text-ink sm:text-2xl">งาน/การบ้าน/สอบ</h1>
+              {filterCourseParam && (
+                <Badge tone="primary">กรองวิชา: {filterCourseParam}</Badge>
+              )}
               {isLoggedInViewer && <Badge tone="warning">👁️ โหมดดูอย่างเดียว</Badge>}
             </div>
             <p className="mt-1 text-xs text-ink-muted sm:text-sm">
-              ติดตามงานที่ได้รับมอบหมาย กำหนดส่งแบบไทย (พ.ศ.) และผู้รับผิดชอบต่องาน
+              ติดตามงานที่ได้รับมอบหมาย กำหนดส่งแบบไทย (พ.ศ.) ห้องสอบ และผู้รับผิดชอบต่องาน
             </p>
           </div>
 
-          {isOwnerOrAdmin && (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setShowCreateForm((prev) => !prev)}
-            >
-              {showCreateForm ? 'ซ่อนฟอร์มสร้างงาน' : '+ สร้างงาน/นัดสอบใหม่'}
-            </Button>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {filterCourseParam && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSearchParams({})}
+              >
+                แสดงทุกวิชา
+              </Button>
+            )}
+            {isOwnerOrAdmin && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setShowCreateForm((prev) => !prev)}
+              >
+                {showCreateForm ? 'ซ่อนฟอร์มสร้างงาน' : '+ สร้างงาน/นัดสอบใหม่'}
+              </Button>
+            )}
+          </div>
         </div>
 
         {isLoggedInViewer && (
@@ -344,7 +406,7 @@ export function TasksPage() {
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="รายละเอียดการส่งงานหรือขอบเขตเนื้อหา"
+                  placeholder="รายละเอียดการส่งงานหรือข้อกำหนด"
                   className="mt-1 min-h-[44px] sm:min-h-[38px] w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink"
                 />
               </div>
@@ -373,6 +435,35 @@ export function TasksPage() {
                 </Button>
               </div>
             </div>
+
+            {taskType === 'exam' && (
+              <div className="grid gap-3 rounded-xl border border-accent-pink/50 bg-accent-pink-soft/20 p-3 sm:grid-cols-3">
+                <div>
+                  <label className="block text-xs font-semibold text-accent-pink-fg">
+                    📍 ห้องสอบ (exam_room)
+                  </label>
+                  <input
+                    type="text"
+                    value={examRoom}
+                    onChange={(e) => setExamRoom(e.target.value)}
+                    placeholder="เช่น 05-0704 อาคาร 5 ชั้น 7"
+                    className="mt-1 min-h-[40px] w-full rounded-xl border border-line-strong bg-surface px-3 py-1.5 text-xs text-ink"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-accent-pink-fg">
+                    📖 หัวข้อที่ออกสอบ (exam_topics)
+                  </label>
+                  <input
+                    type="text"
+                    value={examTopics}
+                    onChange={(e) => setExamTopics(e.target.value)}
+                    placeholder="เช่น บทที่ 1–5 การบริหารโครงการ, CPM/PERT"
+                    className="mt-1 min-h-[40px] w-full rounded-xl border border-line-strong bg-surface px-3 py-1.5 text-xs text-ink"
+                  />
+                </div>
+              </div>
+            )}
 
             {members.length > 0 && (
               <div className="pt-1">
@@ -410,16 +501,20 @@ export function TasksPage() {
 
       {loading ? (
         <Skeleton lines={4} label="อีกาตัวน้อยกำลังดึงรายการงานให้คุณ..." />
-      ) : tasks.length === 0 ? (
+      ) : filteredTasks.length === 0 ? (
         <Card>
           <EmptyState
             mood="happy"
-            title="ยังไม่มีรายการงาน การบ้าน หรือตารางสอบ"
+            title={
+              filterCourseParam
+                ? `ไม่มีรายการงานหรือสอบของวิชา ${filterCourseParam}`
+                : 'ยังไม่มีรายการงาน การบ้าน หรือตารางสอบ'
+            }
             description="เมื่อมีการสร้างงานใหม่ในกลุ่ม รายการงานและกำหนดส่งจะแสดงที่นี่ทันที"
             action={
               isOwnerOrAdmin ? (
                 <Button variant="primary" size="sm" onClick={() => setShowCreateForm(true)}>
-                  + สร้างงานแรกของกลุ่ม
+                  + สร้างงาน/นัดสอบใหม่
                 </Button>
               ) : undefined
             }
@@ -428,15 +523,16 @@ export function TasksPage() {
       ) : (
         <Card>
           <h2 className="text-base font-bold text-ink">
-            รายการงานทั้งหมด ({tasks.length})
+            รายการงานทั้งหมด ({filteredTasks.length})
           </h2>
           <div className="mt-4 space-y-3">
-            {tasks.map((t) => {
+            {filteredTasks.map((t) => {
               const isAssignedToMe = Boolean(user && t.assignee_ids?.includes(user.id))
               const canChangeStatus =
                 isOwnerOrAdmin || (currentRole === 'member' && isAssignedToMe)
               const typeMeta = TASK_TYPE_META[t.task_type] ?? TASK_TYPE_META.homework
               const statusMeta = STATUS_META[t.status] ?? STATUS_META.todo
+              const countdown = getRelativeCountdownThai(t.due_date)
 
               return (
                 <div
@@ -453,16 +549,48 @@ export function TasksPage() {
                         <span>{statusMeta.icon}</span>
                         <span>{statusMeta.label}</span>
                       </Badge>
+                      {t.due_date && t.status !== 'done' && (
+                        <Badge
+                          tone={
+                            countdown.isOverdue
+                              ? 'danger'
+                              : countdown.isUrgent
+                                ? 'warning'
+                                : 'sky'
+                          }
+                        >
+                          ⏰ {countdown.text}
+                        </Badge>
+                      )}
                       {t.course_code && (
-                        <span className="rounded-lg border border-line bg-surface px-2 py-0.5 font-mono text-xs font-bold text-primary">
+                        <Link
+                          to={`/schedule?course=${encodeURIComponent(t.course_code)}`}
+                          className="rounded-lg border border-line bg-surface px-2 py-0.5 font-mono text-xs font-bold text-primary hover:underline"
+                          title="คลิกเพื่อเปิดป็อปอัพรายวิชานี้"
+                        >
                           {t.course_code}
-                        </span>
+                        </Link>
                       )}
                       <h3 className="font-bold text-ink">{t.title}</h3>
                     </div>
 
                     {t.description && (
                       <p className="text-xs text-ink-secondary">{t.description}</p>
+                    )}
+
+                    {t.task_type === 'exam' && (t.exam_room || t.exam_topics) && (
+                      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs">
+                        {t.exam_room && (
+                          <span className="font-semibold text-ink">
+                            📍 ห้องสอบ: <span className="text-primary">{t.exam_room}</span>
+                          </span>
+                        )}
+                        {t.exam_topics && (
+                          <span className="text-ink-secondary">
+                            📖 หัวข้อสอบ: <strong>{t.exam_topics}</strong>
+                          </span>
+                        )}
+                      </div>
                     )}
 
                     <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-ink-muted">

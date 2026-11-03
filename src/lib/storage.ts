@@ -2,6 +2,8 @@ import sampleScheduleCsvRaw from '../../sample-data/schedule.csv?raw'
 import { formatSupabaseErrorThai } from './auth'
 import { isSupabaseConfigured, supabase } from './supabase'
 import type {
+  CourseColorId,
+  CourseLinkItem,
   CourseScheduleItem,
   DayOfWeek,
   RoutineItem,
@@ -84,6 +86,260 @@ export const KNOWN_COURSE_LINKS: Record<
   MGT13167: {
     contact_url: 'https://line.me/R/ti/g/EjZESMY-bK',
   },
+}
+
+export interface CourseColorTheme {
+  id: CourseColorId
+  label: string
+  bg: string
+  border: string
+  bar: string
+  text: string
+  sub: string
+  swatchBg: string
+}
+
+/**
+ * ชุดสีประจำวิชา 8 โทนที่ไม่ซ้ำกัน และผ่านเกณฑ์ความเปรียบต่างสี (WCAG AA Contrast) ทั้ง 3 ธีม
+ * (สว่าง / มืด / ดำสนิท OLED)
+ */
+export const COURSE_COLOR_PALETTE: CourseColorTheme[] = [
+  {
+    id: 'mint',
+    label: 'เขียวมิ้นต์',
+    bg: 'bg-accent-mint-soft hover:opacity-95',
+    border: 'border-accent-mint',
+    bar: 'bg-accent-mint',
+    text: 'text-accent-mint-fg',
+    sub: 'text-ink-secondary',
+    swatchBg: 'bg-accent-mint',
+  },
+  {
+    id: 'indigo',
+    label: 'ม่วงคราม',
+    bg: 'bg-primary-soft hover:opacity-95',
+    border: 'border-primary',
+    bar: 'bg-primary',
+    text: 'text-primary-fg',
+    sub: 'text-ink-secondary',
+    swatchBg: 'bg-primary',
+  },
+  {
+    id: 'amber',
+    label: 'เหลืองอำพัน',
+    bg: 'bg-accent-amber-soft hover:opacity-95',
+    border: 'border-accent-amber',
+    bar: 'bg-accent-amber',
+    text: 'text-accent-amber-fg',
+    sub: 'text-ink-secondary',
+    swatchBg: 'bg-accent-amber',
+  },
+  {
+    id: 'sky',
+    label: 'ฟ้าคราม',
+    bg: 'bg-accent-sky-soft hover:opacity-95',
+    border: 'border-accent-sky',
+    bar: 'bg-accent-sky',
+    text: 'text-accent-sky-fg',
+    sub: 'text-ink-secondary',
+    swatchBg: 'bg-accent-sky',
+  },
+  {
+    id: 'pink',
+    label: 'ชมพูบานเย็น',
+    bg: 'bg-accent-pink-soft hover:opacity-95',
+    border: 'border-accent-pink',
+    bar: 'bg-accent-pink',
+    text: 'text-accent-pink-fg',
+    sub: 'text-ink-secondary',
+    swatchBg: 'bg-accent-pink',
+  },
+  {
+    id: 'violet',
+    label: 'ม่วงไวโอเล็ต',
+    bg: 'bg-accent-violet-soft hover:opacity-95',
+    border: 'border-accent-violet',
+    bar: 'bg-accent-violet',
+    text: 'text-accent-violet-fg',
+    sub: 'text-ink-secondary',
+    swatchBg: 'bg-accent-violet',
+  },
+  {
+    id: 'teal',
+    label: 'เขียวอมฟ้า',
+    bg: 'bg-accent-teal-soft hover:opacity-95',
+    border: 'border-accent-teal',
+    bar: 'bg-accent-teal',
+    text: 'text-accent-teal-fg',
+    sub: 'text-ink-secondary',
+    swatchBg: 'bg-accent-teal',
+  },
+  {
+    id: 'rose',
+    label: 'แดงกุหลาบ',
+    bg: 'bg-accent-rose-soft hover:opacity-95',
+    border: 'border-accent-rose',
+    bar: 'bg-accent-rose',
+    text: 'text-accent-rose-fg',
+    sub: 'text-ink-secondary',
+    swatchBg: 'bg-accent-rose',
+  },
+]
+
+export function getCourseColorTheme(colorId?: string): CourseColorTheme | undefined {
+  if (!colorId) return undefined
+  return COURSE_COLOR_PALETTE.find((c) => c.id === colorId)
+}
+
+/**
+ * จัดสีประจำวิชาอัตโนมัติโดยไม่ให้ซ้ำกันในเทอมเดียวกัน และเคารพสีที่ผู้แก้ไขเลือกเอง
+ */
+export function buildCourseColorMap(
+  sessions: Array<{ course_code: string; color?: string }>,
+): Map<string, CourseColorTheme> {
+  const map = new Map<string, CourseColorTheme>()
+  const usedColorIds = new Set<string>()
+  const uniqueCourses: Array<{ code: string; color?: string }> = []
+  const seenCodes = new Set<string>()
+
+  for (const s of sessions) {
+    const code = (s.course_code || '').trim().toUpperCase()
+    if (!code) continue
+    if (!seenCodes.has(code)) {
+      seenCodes.add(code)
+      uniqueCourses.push({ code, color: s.color })
+    } else if (s.color) {
+      const existing = uniqueCourses.find((u) => u.code === code)
+      if (existing && !existing.color) {
+        existing.color = s.color
+      }
+    }
+  }
+
+  // 1) กำหนดสีที่ผู้ใช้เลือกไว้ชัดเจนก่อน
+  for (const item of uniqueCourses) {
+    const explicitTheme = getCourseColorTheme(item.color)
+    if (explicitTheme) {
+      map.set(item.code, explicitTheme)
+      usedColorIds.add(explicitTheme.id)
+    }
+  }
+
+  // 2) จัดสีอัตโนมัติให้วิชาที่เหลือโดยเลือกสีที่ยังไม่ถูกใช้ก่อน เพื่อไม่ให้สีซ้ำกัน
+  let fallbackIdx = 0
+  for (const item of uniqueCourses) {
+    if (map.has(item.code)) continue
+    const unusedTheme = COURSE_COLOR_PALETTE.find((p) => !usedColorIds.has(p.id))
+    if (unusedTheme) {
+      map.set(item.code, unusedTheme)
+      usedColorIds.add(unusedTheme.id)
+    } else {
+      map.set(item.code, COURSE_COLOR_PALETTE[fallbackIdx % COURSE_COLOR_PALETTE.length])
+      fallbackIdx++
+    }
+  }
+
+  return map
+}
+
+/**
+ * แปลงรหัสห้องเรียนเป็นข้อความสถานที่เต็มจากตารางมหาวิทยาลัย
+ */
+export function resolveLocationText(room: string, customLocationText?: string): string {
+  if (customLocationText && customLocationText.trim().length > 0) {
+    return customLocationText.trim()
+  }
+  const cleanRoom = (room || '').trim()
+  const match = /^05-(\d{2})(\d{2})$/.exec(cleanRoom)
+  if (match) {
+    const floor = match[1]
+    const roomNo = `${match[1]}${match[2]}`
+    return `อาคาร 5 - สยามบรมราชกุมารี ชั้น ${floor} ห้อง ${roomNo}`
+  }
+  return cleanRoom ? `ห้อง ${cleanRoom}` : 'ไม่ระบุห้องเรียน'
+}
+
+/**
+ * ตรวจสอบความถูกต้องของ URL ลิงก์รายวิชา:
+ * รับเฉพาะ https:// เท่านั้น และปฏิเสธ javascript:, data:, vbscript:, http:// ฯลฯ
+ */
+export function validateHttpsCourseUrl(rawUrl: string): {
+  valid: boolean
+  error?: string
+  cleanUrl?: string
+} {
+  const trimmed = (rawUrl || '').trim()
+  if (!trimmed) {
+    return { valid: false, error: 'กรุณากรอก URL ของลิงก์' }
+  }
+
+  if (/^(javascript|data|vbscript|file|blob):/i.test(trimmed)) {
+    return {
+      valid: false,
+      error:
+        'ปฏิเสธลิงก์อันตราย: ไม่อนุญาตให้ใช้โปรโตคอล javascript:, data: หรือสคริปต์ใดๆ ต้องขึ้นต้นด้วย https:// เท่านั้น',
+    }
+  }
+
+  if (!/^https:\/\//i.test(trimmed)) {
+    return {
+      valid: false,
+      error: 'ลิงก์ไม่ถูกต้อง: ต้องขึ้นต้นด้วย https:// เท่านั้น (ไม่อนุญาต http:// หรือโปรโตคอลอื่น)',
+    }
+  }
+
+  try {
+    const parsed = new URL(trimmed)
+    if (parsed.protocol !== 'https:' || !parsed.hostname) {
+      return {
+        valid: false,
+        error: 'รูปแบบ URL ไม่ถูกต้อง กรุณาระบุลิงก์ที่ขึ้นต้นด้วย https:// ให้สมบูรณ์',
+      }
+    }
+    return { valid: true, cleanUrl: parsed.toString() }
+  } catch {
+    return {
+      valid: false,
+      error: 'รูปแบบ URL ไม่ถูกต้อง กรุณาระบุลิงก์ที่ขึ้นต้นด้วย https:// ให้สมบูรณ์',
+    }
+  }
+}
+
+/**
+ * สร้างรายการลิงก์เริ่มต้นของรายวิชาจาก online_url / contact_url หรือ KNOWN_COURSE_LINKS
+ */
+export function buildDefaultCourseLinks(item: {
+  course_code: string
+  online_url?: string
+  contact_url?: string
+  links?: CourseLinkItem[]
+}): CourseLinkItem[] {
+  if (Array.isArray(item.links) && item.links.length > 0) {
+    return item.links.filter((l) => validateHttpsCourseUrl(l.url).valid)
+  }
+
+  const code = (item.course_code || '').trim().toUpperCase()
+  const result: CourseLinkItem[] = []
+  const meetUrl = item.online_url || KNOWN_COURSE_LINKS[code]?.online_url
+  const lineUrl = item.contact_url || KNOWN_COURSE_LINKS[code]?.contact_url
+
+  if (meetUrl && validateHttpsCourseUrl(meetUrl).valid) {
+    result.push({
+      type: 'meet',
+      label: 'ห้องเรียนออนไลน์ (Google Meet)',
+      url: meetUrl,
+    })
+  }
+
+  if (lineUrl && validateHttpsCourseUrl(lineUrl).valid) {
+    result.push({
+      type: 'line',
+      label: 'กลุ่มติดต่อรายวิชา (LINE OpenChat/Group)',
+      url: lineUrl,
+    })
+  }
+
+  return result
 }
 
 export function parseScheduleCsvText(csvText: string): CsvParseResult {
@@ -200,6 +456,12 @@ export function parseScheduleCsvText(csvText: string): CsvParseResult {
       continue
     }
 
+    const itemLinks = buildDefaultCourseLinks({
+      course_code,
+      online_url: finalOnlineUrl,
+      contact_url: finalContactUrl,
+    })
+
     items.push({
       course_code,
       course_name,
@@ -213,6 +475,8 @@ export function parseScheduleCsvText(csvText: string): CsvParseResult {
       online_link: onlineRaw === 'true' || Boolean(finalOnlineUrl),
       online_url: finalOnlineUrl,
       contact_url: finalContactUrl,
+      location_text: resolveLocationText(room),
+      links: itemLinks,
     })
   }
 
@@ -267,6 +531,11 @@ export function mergeScheduleWithoutDuplicates(
         day: normalizeDayCode(item.day),
         start: normalizeTimeStr(item.start),
         end: normalizeTimeStr(item.end),
+        course_id: item.course_id || prev.course_id,
+        color: item.color || prev.color,
+        notes: item.notes ?? prev.notes,
+        location_text: item.location_text || prev.location_text,
+        links: item.links && item.links.length > 0 ? item.links : prev.links,
         online_url: item.online_url || prev.online_url,
         contact_url: item.contact_url || prev.contact_url,
         online_link: item.online_link || prev.online_link,
@@ -288,6 +557,11 @@ export function mergeScheduleWithoutDuplicates(
         day: normalizeDayCode(inc.day),
         start: normalizeTimeStr(inc.start),
         end: normalizeTimeStr(inc.end),
+        course_id: inc.course_id || prev.course_id,
+        color: inc.color || prev.color,
+        notes: inc.notes ?? prev.notes,
+        location_text: inc.location_text || prev.location_text,
+        links: inc.links && inc.links.length > 0 ? inc.links : prev.links,
         online_url: inc.online_url || prev.online_url,
         contact_url: inc.contact_url || prev.contact_url,
         online_link: inc.online_link || prev.online_link,
@@ -536,14 +810,40 @@ class HybridSupabaseStorageAdapter implements StorageAdapter {
         const groupId = await this.ensureGroupIdForUser(rawGroupId, user.id, false)
         if (!groupId) return [] as unknown as T
 
-        const { data, error } = await supabase
-          .from('class_sessions')
-          .select('*')
-          .eq('group_id', groupId)
-          .order('day', { ascending: true })
-          .order('start_time', { ascending: true })
+        const [{ data, error }, { data: coursesData }] = await Promise.all([
+          supabase
+            .from('class_sessions')
+            .select('*')
+            .eq('group_id', groupId)
+            .order('day', { ascending: true })
+            .order('start_time', { ascending: true }),
+          supabase.from('courses').select('*').eq('group_id', groupId),
+        ])
 
         if (error) throw new Error(formatStorageErrorThai(error))
+
+        // อ่านข้อมูลเสริมใน localStorage กรณีฐานข้อมูลยังไม่ได้รันไฟล์ migration-course-details.sql
+        const localCourseMetaMap =
+          (await localStore.get<
+            Record<
+              string,
+              {
+                color?: string
+                notes?: string
+                location_text?: string
+                links?: CourseLinkItem[]
+              }
+            >
+          >(`course_meta:${groupId}:${semester}`)) ?? {}
+
+        const courseRowByCode = new Map<string, Record<string, unknown>>()
+        for (const c of coursesData ?? []) {
+          const cDec = decodeSectionAndSemester((c.section as string) || '001')
+          if (cDec.semester === semester) {
+            const cCode = ((c.course_code as string) || '').trim().toUpperCase()
+            if (cCode) courseRowByCode.set(cCode, c as Record<string, unknown>)
+          }
+        }
 
         const mapped: CourseScheduleItem[] = []
         const seenKeys = new Set<string>()
@@ -558,8 +858,34 @@ class HybridSupabaseStorageAdapter implements StorageAdapter {
           const startTime = normalizeTimeStr(row.start_time as string)
           const endTime = normalizeTimeStr(row.end_time as string)
 
+          const courseRow = courseRowByCode.get(code)
+          const localMeta = localCourseMetaMap[code]
+
+          const dbLinksRaw = courseRow?.links
+          const dbLinks: CourseLinkItem[] | undefined = Array.isArray(dbLinksRaw)
+            ? (dbLinksRaw as CourseLinkItem[])
+            : undefined
+
+          const resolvedLinks =
+            dbLinks && dbLinks.length > 0
+              ? dbLinks
+              : localMeta?.links && localMeta.links.length > 0
+                ? localMeta.links
+                : buildDefaultCourseLinks({
+                    course_code: code,
+                    online_url: KNOWN_COURSE_LINKS[code]?.online_url,
+                    contact_url: KNOWN_COURSE_LINKS[code]?.contact_url,
+                  })
+
+          const meetLink = resolvedLinks.find((l) => l.type === 'meet')?.url
+          const lineOrContactLink = resolvedLinks.find(
+            (l) => l.type === 'line' || l.type === 'contact',
+          )?.url
+
           const item: CourseScheduleItem = {
             id: row.id as string,
+            course_id:
+              (row.course_id as string) || (courseRow?.id as string) || undefined,
             group_id: row.group_id as string,
             course_code: code,
             course_name: row.course_name as string,
@@ -570,9 +896,20 @@ class HybridSupabaseStorageAdapter implements StorageAdapter {
             end: endTime,
             room: row.room as string,
             instructor: row.instructor as string,
-            online_link: Boolean(row.online_link),
-            online_url: KNOWN_COURSE_LINKS[code]?.online_url,
-            contact_url: KNOWN_COURSE_LINKS[code]?.contact_url,
+            online_link: Boolean(row.online_link) || Boolean(meetLink),
+            online_url: meetLink || KNOWN_COURSE_LINKS[code]?.online_url,
+            contact_url: lineOrContactLink || KNOWN_COURSE_LINKS[code]?.contact_url,
+            color:
+              ((courseRow?.color as string) || localMeta?.color || '').trim() ||
+              undefined,
+            notes:
+              typeof courseRow?.notes === 'string'
+                ? courseRow.notes
+                : (localMeta?.notes ?? ''),
+            location_text:
+              ((courseRow?.location_text as string) || localMeta?.location_text || '').trim() ||
+              resolveLocationText(row.room as string),
+            links: resolvedLinks,
           }
 
           const dedupeKey = makeSessionDedupeKey(item)
@@ -727,19 +1064,59 @@ class HybridSupabaseStorageAdapter implements StorageAdapter {
             (c) => (c.course_code as string).toUpperCase() === code,
           )
 
+          const itemLinks = buildDefaultCourseLinks(item)
+          const itemLocationText =
+            item.location_text || resolveLocationText(item.room)
+
           if (matchCourse) {
+            const fullUpdatePayload: Record<string, unknown> = {
+              course_name: item.course_name,
+              credits: Number(item.credits ?? 3),
+              section: encodedSec,
+              instructor: item.instructor || '',
+              online_link: Boolean(item.online_link),
+            }
+            if (item.color !== undefined) fullUpdatePayload.color = item.color
+            if (item.notes !== undefined) fullUpdatePayload.notes = item.notes
+            if (item.location_text !== undefined) {
+              fullUpdatePayload.location_text = item.location_text
+            } else if (!matchCourse.location_text) {
+              fullUpdatePayload.location_text = itemLocationText
+            }
+            if (item.links && item.links.length > 0) {
+              fullUpdatePayload.links = item.links
+            } else if (
+              !Array.isArray(matchCourse.links) ||
+              (matchCourse.links as unknown[]).length === 0
+            ) {
+              fullUpdatePayload.links = itemLinks
+            }
+
             const { error: updCourseErr } = await supabase
               .from('courses')
-              .update({
-                course_name: item.course_name,
-                credits: Number(item.credits ?? 3),
-                section: encodedSec,
-                instructor: item.instructor || '',
-                online_link: Boolean(item.online_link),
-              })
+              .update(fullUpdatePayload)
               .eq('id', matchCourse.id as string)
 
-            if (updCourseErr) throw new Error(formatStorageErrorThai(updCourseErr))
+            if (updCourseErr) {
+              const errMsg = String(
+                (updCourseErr as { message?: string }).message ?? updCourseErr,
+              )
+              if (errMsg.includes('column') && errMsg.includes('does not exist')) {
+                const { error: fallbackUpdErr } = await supabase
+                  .from('courses')
+                  .update({
+                    course_name: item.course_name,
+                    credits: Number(item.credits ?? 3),
+                    section: encodedSec,
+                    instructor: item.instructor || '',
+                    online_link: Boolean(item.online_link),
+                  })
+                  .eq('id', matchCourse.id as string)
+                if (fallbackUpdErr) throw new Error(formatStorageErrorThai(fallbackUpdErr))
+              } else {
+                throw new Error(formatStorageErrorThai(updCourseErr))
+              }
+            }
             courseIdByCode.set(code, matchCourse.id as string)
           } else {
             const { data: insertedCourse, error: insCourseErr } = await supabase
@@ -752,13 +1129,42 @@ class HybridSupabaseStorageAdapter implements StorageAdapter {
                 section: encodedSec,
                 instructor: item.instructor || '',
                 online_link: Boolean(item.online_link),
+                color: item.color || '',
+                notes: item.notes || '',
+                location_text: itemLocationText,
+                links: itemLinks,
                 created_by: user.id,
               })
               .select('id')
               .single()
 
-            if (insCourseErr) throw new Error(formatStorageErrorThai(insCourseErr))
-            if (insertedCourse?.id) {
+            if (insCourseErr) {
+              const errMsg = String(
+                (insCourseErr as { message?: string }).message ?? insCourseErr,
+              )
+              if (errMsg.includes('column') && errMsg.includes('does not exist')) {
+                const { data: fallbackIns, error: fallbackInsErr } = await supabase
+                  .from('courses')
+                  .insert({
+                    group_id: groupId,
+                    course_code: code,
+                    course_name: item.course_name,
+                    credits: Number(item.credits ?? 3),
+                    section: encodedSec,
+                    instructor: item.instructor || '',
+                    online_link: Boolean(item.online_link),
+                    created_by: user.id,
+                  })
+                  .select('id')
+                  .single()
+                if (fallbackInsErr) throw new Error(formatStorageErrorThai(fallbackInsErr))
+                if (fallbackIns?.id) {
+                  courseIdByCode.set(code, fallbackIns.id as string)
+                }
+              } else {
+                throw new Error(formatStorageErrorThai(insCourseErr))
+              }
+            } else if (insertedCourse?.id) {
               courseIdByCode.set(code, insertedCourse.id as string)
             }
           }
@@ -1049,4 +1455,140 @@ export async function migrateLocalDataToSupabase(
 }
 
 export const storage: StorageAdapter = new HybridSupabaseStorageAdapter()
+
+/**
+ * บันทึกรายละเอียดรายวิชา (สีวิชา, โน้ต, ข้อความห้องเต็ม, ลิงก์) ผ่าน storage
+ * พร้อมตรวจสอบความปลอดภัยของ URL (https:// เท่านั้น) และบังคับสิทธิ์ RLS
+ */
+export async function saveCourseDetails(params: {
+  storageKey: string
+  courseCode: string
+  color: string
+  notes: string
+  locationText: string
+  links: CourseLinkItem[]
+  currentSessions: CourseScheduleItem[]
+}): Promise<CourseScheduleItem[]> {
+  if (isShareRoute()) {
+    throw new Error('ลิงก์แชร์เป็นโหมดอ่านอย่างเดียว ไม่สามารถแก้ไขรายละเอียดวิชาได้')
+  }
+
+  const cleanCode = params.courseCode.trim().toUpperCase()
+  const sanitizedLinks: CourseLinkItem[] = []
+
+  for (const link of params.links) {
+    const label = (link.label || '').trim()
+    const rawUrl = (link.url || '').trim()
+    if (!label && !rawUrl) continue
+    if (!label) {
+      throw new Error('กรุณาระบุชื่อป้ายกำกับลิงก์ (Label) ให้ครบถ้วน')
+    }
+    const check = validateHttpsCourseUrl(rawUrl)
+    if (!check.valid || !check.cleanUrl) {
+      throw new Error(check.error || 'ลิงก์ไม่ถูกต้อง ต้องขึ้นต้นด้วย https:// เท่านั้น')
+    }
+    sanitizedLinks.push({
+      type: link.type || 'other',
+      label,
+      url: check.cleanUrl,
+    })
+  }
+
+  const meetUrl = sanitizedLinks.find((l) => l.type === 'meet')?.url
+  const lineUrl = sanitizedLinks.find(
+    (l) => l.type === 'line' || l.type === 'contact',
+  )?.url
+
+  const updatedSessions = params.currentSessions.map((s) => {
+    if (s.course_code.trim().toUpperCase() !== cleanCode) return s
+    return {
+      ...s,
+      color: params.color.trim() || undefined,
+      notes: params.notes,
+      location_text: params.locationText.trim() || resolveLocationText(s.room),
+      links: sanitizedLinks,
+      online_url: meetUrl,
+      contact_url: lineUrl,
+      online_link: Boolean(meetUrl) || s.online_link,
+    }
+  })
+
+  // บันทึกลงตารางผ่าน storage.set (ซิงค์ทั้ง Supabase courses และ localStorage)
+  const { groupId: rawGroupId, semester } = parseKeyGroupSemester(params.storageKey)
+  if (supabase) {
+    const { data: sessionData } = await supabase.auth.getSession()
+    const currentUser = sessionData.session?.user
+    if (currentUser && rawGroupId) {
+      // ตรวจสอบสิทธิ์ผ่านการอัปเดตตาราง courses โดยตรงก่อน
+      const { data: matchingCourses, error: fetchErr } = await supabase
+        .from('courses')
+        .select('id, section')
+        .eq('group_id', rawGroupId)
+        .ilike('course_code', cleanCode)
+
+      if (fetchErr) {
+        throw new Error(formatStorageErrorThai(fetchErr))
+      }
+
+      const targetCourse = (matchingCourses ?? []).find(
+        (c) => decodeSectionAndSemester(c.section as string).semester === semester,
+      )
+
+      if (targetCourse?.id) {
+        const { data: updatedRows, error: updErr } = await supabase
+          .from('courses')
+          .update({
+            color: params.color.trim(),
+            notes: params.notes,
+            location_text: params.locationText.trim(),
+            links: sanitizedLinks,
+            online_link: Boolean(meetUrl),
+          })
+          .eq('id', targetCourse.id as string)
+          .select('id')
+
+        if (updErr) {
+          const errMsg = String((updErr as { message?: string }).message ?? updErr)
+          if (errMsg.includes('column') && errMsg.includes('does not exist')) {
+            // กรณีฐานข้อมูลยังไม่ได้รัน migration-course-details.sql ให้ทดสอบสิทธิ์ด้วยการอัปเดต online_link
+            const { data: testRows, error: testErr } = await supabase
+              .from('courses')
+              .update({ online_link: Boolean(meetUrl) })
+              .eq('id', targetCourse.id as string)
+              .select('id')
+
+            if (testErr) throw new Error(formatStorageErrorThai(testErr))
+            if (!testRows || testRows.length === 0) {
+              throw new Error(
+                'คุณอยู่ในโหมดผู้ชม จึงไม่มีสิทธิ์แก้ไขข้อมูลรายวิชา (ถูกปฏิเสธโดย RLS)',
+              )
+            }
+          } else {
+            throw new Error(formatStorageErrorThai(updErr))
+          }
+        } else if (!updatedRows || updatedRows.length === 0) {
+          throw new Error(
+            'คุณอยู่ในโหมดผู้ชม จึงไม่มีสิทธิ์แก้ไขข้อมูลรายวิชา (ถูกปฏิเสธโดย RLS)',
+          )
+        }
+      }
+
+      // เก็บสำรองใน localStore สำหรับกลุ่มนั้นด้วยเผื่อยังไม่ได้รันไฟล์ migration
+      const metaKey = `course_meta:${rawGroupId}:${semester}`
+      const existingMeta =
+        (await localStore.get<Record<string, unknown>>(metaKey)) ?? {}
+      existingMeta[cleanCode] = {
+        color: params.color.trim(),
+        notes: params.notes,
+        location_text: params.locationText.trim(),
+        links: sanitizedLinks,
+      }
+      await localStore.set(metaKey, existingMeta)
+    }
+  }
+
+  await storage.set(params.storageKey, updatedSessions)
+  return updatedSessions
+}
+
 export default storage

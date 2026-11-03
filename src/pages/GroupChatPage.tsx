@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   Badge,
   Button,
@@ -15,11 +15,14 @@ import type { ChatMessageItem } from '../types'
 
 export function GroupChatPage() {
   const { user, displayName, activeGroup, currentRole } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [messages, setMessages] = useState<ChatMessageItem[]>([])
   const [loading, setLoading] = useState(false)
   const [content, setContent] = useState('')
   const [sending, setSending] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  const courseTagParam = (searchParams.get('course') ?? '').trim().toUpperCase()
 
   const isLoggedInViewer = Boolean(user && currentRole === 'viewer')
   const canChat =
@@ -100,6 +103,11 @@ export function GroupChatPage() {
     const trimmed = content.trim()
     if (!trimmed) return
 
+    const finalContent =
+      courseTagParam && !trimmed.toUpperCase().includes(courseTagParam)
+        ? `[#${courseTagParam}] ${trimmed}`
+        : trimmed
+
     setSending(true)
     setErrorMessage(null)
 
@@ -110,7 +118,7 @@ export function GroupChatPage() {
           group_id: activeGroup.id,
           sender_id: user.id,
           sender_name: displayName || 'สมาชิก',
-          content: trimmed,
+          content: finalContent,
           pinned: false,
         })
         .select('*')
@@ -149,7 +157,10 @@ export function GroupChatPage() {
     }
   }
 
-  const pinnedMessages = messages.filter((m) => m.pinned)
+  const displayedMessages = courseTagParam
+    ? messages.filter((m) => m.content.toUpperCase().includes(courseTagParam))
+    : messages
+  const pinnedMessages = displayedMessages.filter((m) => m.pinned)
 
   return (
     <div className="space-y-6">
@@ -158,6 +169,9 @@ export function GroupChatPage() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold text-ink sm:text-2xl">แชทกลุ่ม</h1>
+              {courseTagParam && (
+                <Badge tone="primary">💬 ห้องแชทวิชา #{courseTagParam}</Badge>
+              )}
               {isLoggedInViewer && <Badge tone="warning">👁️ โหมดดูอย่างเดียว</Badge>}
             </div>
             <p className="mt-1 text-xs text-ink-muted sm:text-sm">
@@ -166,6 +180,22 @@ export function GroupChatPage() {
                 : 'ห้องสนทนาแลกเปลี่ยนข้อมูลในกลุ่มเรียน (Supabase Realtime)'}
             </p>
           </div>
+          {courseTagParam && (
+            <div className="flex items-center gap-2">
+              <Link to={`/schedule?course=${encodeURIComponent(courseTagParam)}`}>
+                <Button variant="outline" size="sm">
+                  ← กลับไปป็อปอัพวิชา {courseTagParam}
+                </Button>
+              </Link>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setSearchParams({})}
+              >
+                ดูข้อความทุกวิชา
+              </Button>
+            </div>
+          )}
         </div>
 
         {!user && (
@@ -243,14 +273,18 @@ export function GroupChatPage() {
             <div className="flex-1 space-y-3 overflow-y-auto pr-1">
               {loading ? (
                 <Skeleton lines={3} label="กำลังโหลดข้อความแชท..." />
-              ) : messages.length === 0 ? (
+              ) : displayedMessages.length === 0 ? (
                 <EmptyState
                   mood="happy"
-                  title="ยังไม่มีข้อความในกลุ่มนี้"
-                  description="ทักทายเพื่อนในกลุ่มเพื่อเริ่มต้นสนทนาได้เลยเหมียว!"
+                  title={
+                    courseTagParam
+                      ? `ยังไม่มีข้อความในห้องวิชา #${courseTagParam}`
+                      : 'ยังไม่มีข้อความในกลุ่มนี้'
+                  }
+                  description="ทักทายเพื่อนในกลุ่มเพื่อเริ่มต้นสนทนาได้เลย!"
                 />
               ) : (
-                messages.map((msg) => {
+                displayedMessages.map((msg) => {
                   const isMine = msg.sender_id === user.id
                   return (
                     <div
@@ -298,7 +332,11 @@ export function GroupChatPage() {
                   required
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
-                  placeholder="พิมพ์ข้อความในกลุ่ม..."
+                  placeholder={
+                    courseTagParam
+                      ? `พิมพ์ข้อความถึงห้องวิชา #${courseTagParam}...`
+                      : 'พิมพ์ข้อความในกลุ่ม...'
+                  }
                   className="min-h-[44px] flex-1 rounded-xl border border-line-strong bg-surface px-3.5 py-2 text-sm text-ink focus:border-primary focus:outline-none"
                 />
                 <Button type="submit" variant="primary" disabled={sending}>

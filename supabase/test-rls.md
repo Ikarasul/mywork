@@ -106,3 +106,59 @@
 3. กลับไปที่ **บัญชี A (Owner)** ในหน้า `/group` แล้วกด **ยกเลิกลิงก์แชร์**
 4. รีเฟรชหน้า `/share/:token` ในหน้าต่างไม่ระบุตัวตน
    * **ผลลัพธ์ที่ต้องได้:** ไม่สามารถดูข้อมูลได้ และแสดงข้อความว่า `"ลิงก์แชร์ไม่ถูกต้องหรือถูกยกเลิกแล้ว"`
+
+---
+
+## ขั้นตอนที่ 5: ทดสอบรายละเอียดรายวิชา ลิงก์ และความปลอดภัย (รอบ 8: `migration-course-details.sql`)
+
+### 5.1 การรันไฟล์ Migration
+1. เปิด **Supabase Dashboard > SQL Editor**
+2. คัดลอกโค้ดทั้งหมดจากไฟล์ `supabase/migration-course-details.sql` ไปวางแล้วกด **Run**
+   * **ผลลัพธ์ที่ต้องได้:** สร้างฟังก์ชัน `validate_course_links`, เพิ่มคอลัมน์ `color`, `notes`, `location_text`, `links` ใน `courses`, เพิ่มคอลัมน์ `exam_room`, `exam_topics` ใน `tasks`, และอัปเดตฟังก์ชัน `get_shared_view(token)` สำเร็จ
+
+### 5.2 ทดสอบการบล็อกลิงก์อันตราย (`javascript:alert(1)`)
+1. **ทดสอบผ่านหน้าเว็บ (UI):**
+   * ล็อกอินด้วย **บัญชี A (Owner/Member)** ไปที่หน้า `/schedule` กดที่บล็อกวิชาเพื่อเปิดป็อปอัพ `CourseDialog`
+   * กดปุ่ม **แก้ไขรายละเอียดวิชา** แล้วลองเพิ่มลิงก์โดยกรอก URL เป็น `javascript:alert(1)` หรือ `data:text/html,<script>alert(1)</script>` หรือ `http://example.com`
+   * **ผลลัพธ์ที่ต้องได้:** ระบบปฏิเสธทันทีและแสดงข้อความแจ้งเตือนภาษาไทยว่าต้องขึ้นต้นด้วย `https://` เท่านั้น
+2. **ทดสอบยิงผ่าน SQL / API ตรงๆ (ระดับฐานข้อมูล):**
+   ```sql
+   BEGIN;
+   -- พยายามยัดลิงก์ javascript:alert(1) ลงตาราง courses โดยตรง (ต้องติด CHECK constraint courses_links_valid_check)
+   UPDATE public.courses
+   SET links = '[{"type":"other","label":"XSS","url":"javascript:alert(1)"}]'::jsonb;
+   ROLLBACK;
+   ```
+   * **ผลลัพธ์ที่ต้องได้:** ฐานข้อมูลปฏิเสธด้วย `ERROR: new row for relation "courses" violates check constraint "courses_links_valid_check"`
+
+### 5.3 ทดสอบผู้ชมที่ล็อกอินแต่ไม่มีรหัสเชิญ (Viewer) พยายามแก้ลิงก์/โน้ตผ่าน API ตรงๆ
+1. ล็อกอินด้วย **บัญชี B (ตอนที่ยังไม่ได้กรอกรหัสเชิญเข้ากลุ่ม)**
+2. เปิดป็อปอัพรายวิชาในหน้า `/schedule`:
+   * **ผลลัพธ์บนหน้าเว็บ:** แสดงป้าย `👁️ โหมดดูอย่างเดียว` และไม่มีปุ่มแก้ไขลิงก์ โน้ต หรือสีวิชา
+3. **ทดสอบยิง API ตรงๆ จาก Browser Console หรือ SQL Editor ในนามบัญชี B:**
+   ```sql
+   BEGIN;
+   SET LOCAL role = 'authenticated';
+   SET LOCAL "request.jwt.claims" = '{"sub": "<USER_B_UUID>", "role": "authenticated"}';
+
+   -- พยายามแอบแก้ links และ notes ของรายวิชาในกลุ่มที่ตนเองไม่ได้เป็นสมาชิก
+   UPDATE public.courses
+   SET notes = 'แอบแก้โน้ต',
+       links = '[{"type":"other","label":"Hack","url":"https://example.com"}]'::jsonb
+   WHERE group_id = '<GROUP_UUID>';
+
+   ROLLBACK;
+   ```
+   * **ผลลัพธ์ที่ต้องได้:** อัปเดตได้ `0 rows` (ถูกบล็อกด้วย RLS Policy `courses_update_group_members` ซึ่งอนุญาตเฉพาะ `owner`, `admin`, `member` ในกลุ่มนั้น)
+
+### 5.4 ทดสอบลิงก์แชร์ (`/share/:token`) ในหน้าต่างไม่ระบุตัวตน: ต้องไม่มี `links` และ `notes` ส่งมาจากฐานข้อมูล
+1. ใช้ **บัญชี A** เพิ่มโน้ตและลิงก์ (`https://meet.google.com/...`) ลงในรายวิชา แล้วสร้างลิงก์แชร์ `/share/:token`
+2. เปิดหน้าต่างไม่ระบุตัวตน (Incognito) เข้าไปที่ `/share/:token`:
+   * **ผลลัพธ์บนหน้าเว็บ:** ไม่แสดงลิงก์และโน้ตของรายวิชา
+3. **ตรวจผ่านการเรียก RPC API ตรงๆ (DevTools > Network หรือ Console):**
+   ```js
+   // รันใน Browser Console ของหน้าต่างไม่ระบุตัวตน หรือตรวจดู Response ของ RPC get_shared_view
+   const { data } = await supabase.rpc('get_shared_view', { token: '<SHARE_TOKEN>' })
+   console.log(data.courses)
+   ```
+   * **ผลลัพธ์ที่ต้องได้:** ในแต่ละออบเจกต์ของ `data.courses` มีเฉพาะ `id`, `course_code`, `course_name`, `credits`, `section`, `instructor`, `online_link`, `color`, `location_text` **โดยไม่มีคีย์ `links` และไม่มีคีย์ `notes` อยู่ใน JSON ที่ส่งกลับมาจากฐานข้อมูลเลย**

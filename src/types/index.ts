@@ -49,8 +49,27 @@ export interface ShareLinkItem {
   created_at: string
 }
 
+export type CourseLinkType = 'meet' | 'line' | 'contact' | 'lms' | 'other'
+
+export interface CourseLinkItem {
+  type: CourseLinkType
+  label: string
+  url: string
+}
+
+export type CourseColorId =
+  | 'mint'
+  | 'indigo'
+  | 'amber'
+  | 'sky'
+  | 'pink'
+  | 'rose'
+  | 'violet'
+  | 'teal'
+
 export interface CourseScheduleItem {
   id?: string
+  course_id?: string
   group_id?: string
   course_code: string
   course_name: string
@@ -64,6 +83,10 @@ export interface CourseScheduleItem {
   online_link: boolean
   online_url?: string
   contact_url?: string
+  color?: string
+  notes?: string
+  location_text?: string
+  links?: CourseLinkItem[]
 }
 
 export interface RoutineItem {
@@ -91,6 +114,8 @@ export interface TaskItem {
   due_date: string | null
   status: TaskStatus
   assignee_ids: string[]
+  exam_room?: string
+  exam_topics?: string
   created_by?: string | null
   created_at?: string
   updated_at?: string
@@ -121,9 +146,12 @@ export interface SharedViewPayload {
     section: string
     instructor: string
     online_link: boolean
+    color?: string
+    location_text?: string
   }>
   class_sessions: Array<{
     id: string
+    course_id?: string
     course_code: string
     course_name: string
     credits: number
@@ -143,6 +171,8 @@ export interface SharedViewPayload {
     course_code: string
     due_date: string | null
     status: TaskStatus
+    exam_room?: string
+    exam_topics?: string
     assignee_names: string[]
   }>
 }
