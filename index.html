@@ -1,11 +1,36 @@
 <!doctype html>
-<html lang="th">
+<html lang="th" class="theme-light">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>ระบบจัดตารางชีวิตและการเรียน</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Prompt:wght@400;500;600;700&family=Silkscreen:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      ;(function () {
+        try {
+          var key = 'lsp:ui_theme'
+          var saved = window.localStorage.getItem(key)
+          var theme =
+            saved === 'light' || saved === 'dark' || saved === 'oled'
+              ? saved
+              : window.matchMedia &&
+                  window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light'
+          var root = document.documentElement
+          root.classList.remove('theme-light', 'theme-dark', 'theme-oled')
+          root.classList.add('theme-' + theme)
+          root.setAttribute('data-theme', theme)
+        } catch (e) {}
+      })()
+    </script>
   </head>
-  <body class="bg-slate-50 text-slate-900 antialiased">
+  <body class="bg-app text-ink font-sans antialiased selection:bg-primary-soft selection:text-primary">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
