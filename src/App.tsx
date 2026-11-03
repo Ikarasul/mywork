@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import SupabaseConfigBanner from './components/SupabaseConfigBanner'
+import LocalDataMigrationBanner from './components/LocalDataMigrationBanner'
 import { AuthProvider } from './lib/auth'
 import LifeSchedulePage from './pages/LifeSchedulePage'
 import ClassSchedulePage from './pages/ClassSchedulePage'
@@ -15,6 +16,7 @@ export function App() {
         <div className="min-h-screen bg-slate-50 text-slate-900">
           <Navbar />
           <SupabaseConfigBanner />
+          <LocalDataMigrationBanner />
           <main className="mx-auto max-w-6xl px-4 py-6">
             <Routes>
               <Route path="/" element={<Navigate to="/life" replace />} />
