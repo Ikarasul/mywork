@@ -409,7 +409,7 @@ export function TasksPage() {
       </Card>
 
       {loading ? (
-        <Skeleton lines={4} label="แมวเหมียวกำลังดึงรายการงานให้คุณ..." />
+        <Skeleton lines={4} label="อีกาตัวน้อยกำลังดึงรายการงานให้คุณ..." />
       ) : tasks.length === 0 ? (
         <Card>
           <EmptyState

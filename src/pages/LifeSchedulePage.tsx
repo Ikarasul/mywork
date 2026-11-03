@@ -287,7 +287,7 @@ export function LifeSchedulePage() {
       />
 
       {loading ? (
-        <Skeleton lines={4} label="แมวเหมียวกำลังจัดตารางชีวิตให้คุณ..." />
+        <Skeleton lines={4} label="อีกาตัวน้อยกำลังจัดตารางชีวิตให้คุณ..." />
       ) : items.length === 0 && (!gcal.overlayVisible || gcal.events.length === 0) ? (
         <Card>
           <EmptyState

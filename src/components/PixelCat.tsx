@@ -1,4 +1,5 @@
 export type PixelCatMood = 'idle' | 'sleep' | 'happy' | 'confused'
+export type PixelRavenMood = PixelCatMood
 
 export interface PixelCatProps {
   mood?: PixelCatMood
@@ -7,19 +8,21 @@ export interface PixelCatProps {
   label?: string
 }
 
-const MOOD_ARIA_LABELS: Record<PixelCatMood, string> = {
-  idle: 'มาสคอตแมวพิกเซลกำลังนั่งมองตาแป๋ว',
-  sleep: 'มาสคอตแมวพิกเซลกำลังนอนหลับปุ๋ย',
-  happy: 'มาสคอตแมวพิกเซลกำลังยิ้มอย่างมีความสุข',
-  confused: 'มาสคอตแมวพิกเซลกำลังงุนงงสงสัย',
+export type PixelRavenProps = PixelCatProps
+
+const MOOD_ARIA_LABELS: Record<PixelRavenMood, string> = {
+  idle: 'มาสคอตนกอีกาพิกเซล ยืนเกาะอย่างชาญฉลาด',
+  sleep: 'มาสคอตนกอีกาพิกเซล กำลังซุกปีกนอนหลับพักผ่อน',
+  happy: 'มาสคอตนกอีกาพิกเซล กำลังกระพือปีกอย่างร่าเริง',
+  confused: 'มาสคอตนกอีกาพิกเซล กำลังเอียงคอสงสัย',
 }
 
-export function PixelCat({
+export function PixelRaven({
   mood = 'idle',
   size = 48,
   className = '',
   label,
-}: PixelCatProps) {
+}: PixelRavenProps) {
   const ariaLabel = label ?? MOOD_ARIA_LABELS[mood]
 
   return (
@@ -34,113 +37,95 @@ export function PixelCat({
       aria-label={ariaLabel}
       className={`inline-block select-none ${className}`}
     >
-      {/* หางพิกเซลกระดิกได้ */}
+      {/* หางอีกาด้านหลัง */}
       <g className="pixel-cat-tail-anim">
-        <rect x="13" y="10" width="1" height="3" fill="var(--color-cat-fur-dark)" />
-        <rect x="14" y="8" width="1" height="3" fill="var(--color-cat-fur)" />
-        <rect x="14" y="7" width="1" height="1" fill="var(--color-cat-outline)" />
+        <rect x="1" y="11" width="3" height="2" fill="#1e1b4b" />
+        <rect x="2" y="12" width="3" height="2" fill="#0f172a" />
+        <rect x="0" y="12" width="2" height="1" fill="#020617" />
       </g>
 
-      {/* ลำตัวและหัวของแมวพิกเซลต้นฉบับ */}
+      {/* ลำตัวและปีกอีกาพิกเซล */}
       <g className="pixel-cat-body-anim">
-        {/* หูซ้ายและขวา */}
-        <rect x="3" y="2" width="2" height="1" fill="var(--color-cat-outline)" />
-        <rect x="10" y="2" width="2" height="1" fill="var(--color-cat-outline)" />
-        <rect x="2" y="3" width="1" height="2" fill="var(--color-cat-outline)" />
-        <rect x="12" y="3" width="1" height="2" fill="var(--color-cat-outline)" />
-        <rect x="3" y="3" width="1" height="1" fill="var(--color-cat-ear)" />
-        <rect x="4" y="3" width="1" height="1" fill="var(--color-cat-fur)" />
-        <rect x="10" y="3" width="1" height="1" fill="var(--color-cat-fur)" />
-        <rect x="11" y="3" width="1" height="1" fill="var(--color-cat-ear)" />
+        {/* ขนหงอนด้านบนหัว */}
+        <rect x="7" y="1" width="2" height="1" fill="#0f172a" />
+        <rect x="6" y="2" width="4" height="1" fill="#1e1b4b" />
+        <rect x="5" y="2" width="1" height="1" fill="#312e81" />
 
-        {/* ขอบหัวด้านบน */}
-        <rect x="5" y="3" width="5" height="1" fill="var(--color-cat-outline)" />
+        {/* ส่วนหัวอีกา */}
+        <rect x="5" y="3" width="6" height="4" fill="#0f172a" />
+        <rect x="6" y="3" width="4" height="2" fill="#1e1b4b" />
 
-        {/* ใบหน้าแมว */}
-        <rect x="2" y="5" width="1" height="5" fill="var(--color-cat-outline)" />
-        <rect x="12" y="5" width="1" height="5" fill="var(--color-cat-outline)" />
-        <rect x="3" y="4" width="9" height="6" fill="var(--color-cat-fur)" />
+        {/* จะงอยปากสีทอง/ส้มเด่นชัดของนกอีกา */}
+        <rect x="11" y="5" width="3" height="1" fill="#f59e0b" />
+        <rect x="11" y="6" width="2" height="1" fill="#d97706" />
+        <rect x="13" y="6" width="1" height="1" fill="#b45309" />
 
-        {/* ลายหน้าผากเสือส้มต้นฉบับ */}
-        <rect x="7" y="4" width="1" height="2" fill="var(--color-cat-fur-dark)" />
-        <rect x="5" y="4" width="1" height="1" fill="var(--color-cat-fur-dark)" />
-        <rect x="9" y="4" width="1" height="1" fill="var(--color-cat-fur-dark)" />
-
-        {/* แก้มชมพู */}
-        <rect x="3" y="7" width="1" height="1" fill="var(--color-cat-ear)" />
-        <rect x="11" y="7" width="1" height="1" fill="var(--color-cat-ear)" />
-
-        {/* จมูกและปาก */}
-        <rect x="7" y="7" width="1" height="1" fill="var(--color-accent-pink)" />
-        <rect x="6" y="8" width="3" height="1" fill="var(--color-cat-belly)" />
-
-        {/* ดวงตาตามอารมณ์ (mood) */}
+        {/* ดวงตาของอีกาตามอารมณ์ */}
         {mood === 'idle' && (
           <g className="pixel-cat-eye-anim">
-            <rect x="4" y="6" width="2" height="2" fill="var(--color-cat-eye)" />
-            <rect x="9" y="6" width="2" height="2" fill="var(--color-cat-eye)" />
-            <rect x="4" y="6" width="1" height="1" fill="var(--color-cat-belly)" />
-            <rect x="9" y="6" width="1" height="1" fill="var(--color-cat-belly)" />
+            <rect x="8" y="4" width="2" height="2" fill="#38bdf8" />
+            <rect x="9" y="4" width="1" height="1" fill="#ffffff" />
           </g>
         )}
 
         {mood === 'sleep' && (
           <g>
-            {/* ตาหลับเป็นขีดโค้ง */}
-            <rect x="4" y="7" width="2" height="1" fill="var(--color-cat-eye)" />
-            <rect x="9" y="7" width="2" height="1" fill="var(--color-cat-eye)" />
-            {/* ตัว Z พิกเซลด้านบน */}
-            <rect x="13" y="1" width="2" height="1" fill="var(--color-primary)" />
-            <rect x="14" y="2" width="1" height="1" fill="var(--color-primary)" />
-            <rect x="13" y="3" width="2" height="1" fill="var(--color-primary)" />
+            {/* ตาหลับเป็นเส้นขีด */}
+            <rect x="8" y="5" width="2" height="1" fill="#38bdf8" />
+            {/* ตัว Z พิกเซลลอยขึ้น */}
+            <rect x="12" y="1" width="2" height="1" fill="#818cf8" />
+            <rect x="13" y="2" width="1" height="1" fill="#818cf8" />
+            <rect x="12" y="3" width="2" height="1" fill="#818cf8" />
           </g>
         )}
 
         {mood === 'happy' && (
           <g>
-            {/* ตายิ้มโค้ง ^ ^ */}
-            <rect x="4" y="6" width="1" height="1" fill="var(--color-cat-eye)" />
-            <rect x="5" y="5" width="1" height="1" fill="var(--color-cat-eye)" />
-            <rect x="9" y="5" width="1" height="1" fill="var(--color-cat-eye)" />
-            <rect x="10" y="6" width="1" height="1" fill="var(--color-cat-eye)" />
-            {/* หัวใจพิกเซลเล็กๆ ด้านบน */}
-            <rect x="13" y="2" width="1" height="1" fill="var(--color-accent-pink)" />
-            <rect x="15" y="2" width="1" height="1" fill="var(--color-accent-pink)" />
-            <rect x="13" y="3" width="3" height="1" fill="var(--color-accent-pink)" />
-            <rect x="14" y="4" width="1" height="1" fill="var(--color-accent-pink)" />
+            {/* ตายิ้มรูปโค้ง ^ */}
+            <rect x="8" y="4" width="1" height="1" fill="#38bdf8" />
+            <rect x="9" y="3" width="1" height="1" fill="#38bdf8" />
+            {/* หัวใจพิกเซลลอย */}
+            <rect x="12" y="1" width="1" height="1" fill="#ec4899" />
+            <rect x="14" y="1" width="1" height="1" fill="#ec4899" />
+            <rect x="12" y="2" width="3" height="1" fill="#ec4899" />
+            <rect x="13" y="3" width="1" height="1" fill="#ec4899" />
           </g>
         )}
 
         {mood === 'confused' && (
           <g>
-            {/* ตาข้างหนึ่งโต ข้างหนึ่งหรี่ พร้อมเครื่องหมาย ? */}
-            <rect x="4" y="6" width="2" height="2" fill="var(--color-cat-eye)" />
-            <rect x="9" y="7" width="2" height="1" fill="var(--color-cat-eye)" />
-            {/* เครื่องหมายคำถามพิกเซล */}
-            <rect x="13" y="1" width="2" height="1" fill="var(--color-accent-amber)" />
-            <rect x="15" y="2" width="1" height="1" fill="var(--color-accent-amber)" />
-            <rect x="14" y="3" width="1" height="1" fill="var(--color-accent-amber)" />
-            <rect x="14" y="5" width="1" height="1" fill="var(--color-accent-amber)" />
+            {/* ตาโตข้างเดียว */}
+            <rect x="8" y="4" width="2" height="2" fill="#38bdf8" />
+            <rect x="8" y="4" width="1" height="1" fill="#ffffff" />
+            {/* เครื่องหมายคำถาม (?) พิกเซลสีทอง */}
+            <rect x="12" y="1" width="2" height="1" fill="#fbbf24" />
+            <rect x="14" y="2" width="1" height="1" fill="#fbbf24" />
+            <rect x="13" y="3" width="1" height="1" fill="#fbbf24" />
+            <rect x="13" y="5" width="1" height="1" fill="#fbbf24" />
           </g>
         )}
 
-        {/* ปลอกคอและกระดิ่ง */}
-        <rect x="4" y="10" width="7" height="1" fill="var(--color-cat-collar)" />
-        <rect x="7" y="10" width="1" height="2" fill="var(--color-cat-bell)" />
+        {/* ลำตัวและปีก (ขนสีน้ำเงินเข้ม ดำขลับ เหลือบม่วง) */}
+        <rect x="4" y="7" width="7" height="5" fill="#0f172a" />
+        <rect x="5" y="7" width="5" height="4" fill="#1e1b4b" />
+        {/* ลายขนปีกพับด้านข้าง */}
+        <rect x="3" y="8" width="4" height="4" fill="#312e81" />
+        <rect x="2" y="9" width="3" height="3" fill="#1e1b4b" />
+        <rect x="4" y="10" width="3" height="2" fill="#4338ca" />
 
-        {/* ลำตัวและพุง */}
-        <rect x="3" y="11" width="1" height="3" fill="var(--color-cat-outline)" />
-        <rect x="11" y="11" width="1" height="3" fill="var(--color-cat-outline)" />
-        <rect x="4" y="11" width="7" height="3" fill="var(--color-cat-fur)" />
-        <rect x="6" y="11" width="3" height="3" fill="var(--color-cat-belly)" />
+        {/* ขาและกรงเล็บอีกาสีทองเกาะกิ่ง */}
+        <rect x="5" y="12" width="1" height="2" fill="#f59e0b" />
+        <rect x="8" y="12" width="1" height="2" fill="#f59e0b" />
+        <rect x="4" y="14" width="3" height="1" fill="#d97706" />
+        <rect x="7" y="14" width="3" height="1" fill="#d97706" />
 
-        {/* อุ้งเท้าหน้า */}
-        <rect x="4" y="14" width="2" height="1" fill="var(--color-cat-belly)" />
-        <rect x="9" y="14" width="2" height="1" fill="var(--color-cat-belly)" />
-        <rect x="3" y="14" width="9" height="1" fill="var(--color-cat-outline)" opacity="0.25" />
+        {/* กิ่งไม้/คอนรองเกาะ */}
+        <rect x="2" y="15" width="12" height="1" fill="#78350f" opacity="0.85" />
       </g>
     </svg>
   )
 }
 
-export default PixelCat
+// Export ทั้ง PixelRaven และ PixelCat เพื่อให้คอมโพเนนต์อื่น ๆ เรียกใช้ได้ทันที
+export const PixelCat = PixelRaven
+export default PixelRaven

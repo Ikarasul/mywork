@@ -344,7 +344,7 @@ export function AppShell({
           ) : isDarkOrOled ? (
             <div className="mx-auto flex max-w-6xl items-center justify-center gap-2.5 px-3 pb-6 text-xs text-ink-muted sm:px-6">
               <PixelCat mood="sleep" size={28} />
-              <span>โหมดกลางคืนเปิดอยู่ — น้องแมวกำลังนอนหลับพักสายตาไปพร้อมกับคุณ</span>
+              <span>โหมดกลางคืนเปิดอยู่ — อีกาตัวน้อยกำลังซุกปีกหลับพักผ่อนไปพร้อมกับคุณ</span>
             </div>
           ) : null}
         </div>

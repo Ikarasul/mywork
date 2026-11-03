@@ -119,7 +119,7 @@ export function TodayPage() {
   }, [tasks])
 
   if (loading) {
-    return <Skeleton lines={5} label="แมวเหมียวกำลังสรุปตารางวันนี้ให้คุณ..." />
+    return <Skeleton lines={5} label="อีกาตัวน้อยกำลังสรุปตารางวันนี้ให้คุณ..." />
   }
 
   return (

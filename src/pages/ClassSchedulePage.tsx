@@ -1104,7 +1104,7 @@ export function ClassSchedulePage() {
 
       {/* เนื้อหาหลักตามมุมมองที่เลือก */}
       {loading ? (
-        <Skeleton lines={5} label="แมวเหมียวกำลังโหลดตารางเรียน..." />
+        <Skeleton lines={5} label="อีกาตัวน้อยกำลังโหลดตารางเรียน..." />
       ) : activeTab === 'weekly' ? (
         <Card>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
