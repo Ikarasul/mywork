@@ -14,6 +14,7 @@ import {
   DEFAULT_SEMESTER,
   KNOWN_COURSE_LINKS,
   getSampleScheduleFromCsv,
+  mergeScheduleWithoutDuplicates,
   storage,
   timeToMinutes,
 } from '../lib/storage'
@@ -81,8 +82,9 @@ export function TodayPage() {
         contact_url: s.contact_url || KNOWN_COURSE_LINKS[s.course_code]?.contact_url,
         online_link: s.online_link || Boolean(s.online_url || KNOWN_COURSE_LINKS[s.course_code]?.online_url),
       }))
+      const { merged: dedupedTodaySched } = mergeScheduleWithoutDuplicates([], resolvedSchedule)
 
-      setSessions(resolvedSchedule)
+      setSessions(dedupedTodaySched)
       setRoutines(routineData ?? [])
       setTasks(taskData ?? [])
     } catch {

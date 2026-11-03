@@ -15,6 +15,29 @@ const MIGRATED_FLAG_PREFIX = 'lsp:migrated_user:'
 export const DEFAULT_SEMESTER = 'summer-2569'
 
 const VALID_DAYS: DayOfWeek[] = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+
+export function normalizeDayCode(day: string): DayOfWeek {
+  const d = (day || '').trim().toUpperCase()
+  if (d === 'M' || d === 'MON' || d.includes('จัน')) return 'MON'
+  if (d === 'T' || d === 'TUE' || d.includes('อัง')) return 'TUE'
+  if (d === 'W' || d === 'WED' || d.includes('พุธ')) return 'WED'
+  if (d === 'H' || d === 'THU' || d.includes('พฤ')) return 'THU'
+  if (d === 'F' || d === 'FRI' || d.includes('ศุก')) return 'FRI'
+  if (d === 'S' || d === 'SAT' || d.includes('เสา')) return 'SAT'
+  if (d === 'U' || d === 'SUN' || d.includes('อา')) return 'SUN'
+  return 'MON'
+}
+
+export function normalizeTimeStr(time: string): string {
+  const clean = (time || '').trim()
+  const parts = clean.split(':')
+  if (parts.length >= 2) {
+    const hh = parts[0].padStart(2, '0')
+    const mm = parts[1].padStart(2, '0')
+    return `${hh}:${mm}`
+  }
+  return clean
+}
 const EXPECTED_CSV_HEADERS = [
   'course_code',
   'course_name',
@@ -103,21 +126,21 @@ export function parseScheduleCsvText(csvText: string): CsvParseResult {
       continue
     }
 
-    const course_code = cols[colIndex('course_code')].toUpperCase()
-    const course_name = cols[colIndex('course_name')]
-    const creditsStr = cols[colIndex('credits')]
-    const section = cols[colIndex('section')] || '001'
-    const dayRaw = cols[colIndex('day')].toUpperCase()
-    const start = cols[colIndex('start')]
-    const end = cols[colIndex('end')]
-    const room = cols[colIndex('room')]
-    const instructor = cols[colIndex('instructor')]
-    const onlineRaw = cols[colIndex('online_link')].toLowerCase()
+    const course_code = cols[colIndex('course_code')].trim().toUpperCase()
+    const course_name = cols[colIndex('course_name')].trim()
+    const creditsStr = cols[colIndex('credits')].trim()
+    const section = cols[colIndex('section')].trim() || '001'
+    const dayRaw = cols[colIndex('day')].trim().toUpperCase()
+    const start = normalizeTimeStr(cols[colIndex('start')])
+    const end = normalizeTimeStr(cols[colIndex('end')])
+    const room = cols[colIndex('room')].trim()
+    const instructor = cols[colIndex('instructor')].trim()
+    const onlineRaw = cols[colIndex('online_link')].trim().toLowerCase()
 
     const onlineUrlCol = colIndex('online_url')
     const contactUrlCol = colIndex('contact_url')
-    const parsedOnlineUrl = onlineUrlCol !== -1 ? cols[onlineUrlCol] : undefined
-    const parsedContactUrl = contactUrlCol !== -1 ? cols[contactUrlCol] : undefined
+    const parsedOnlineUrl = onlineUrlCol !== -1 ? cols[onlineUrlCol]?.trim() : undefined
+    const parsedContactUrl = contactUrlCol !== -1 ? cols[contactUrlCol]?.trim() : undefined
 
     const finalOnlineUrl =
       parsedOnlineUrl || KNOWN_COURSE_LINKS[course_code]?.online_url || undefined
@@ -141,7 +164,8 @@ export function parseScheduleCsvText(csvText: string): CsvParseResult {
       continue
     }
 
-    if (!VALID_DAYS.includes(dayRaw as DayOfWeek)) {
+    const normalizedDay = normalizeDayCode(dayRaw)
+    if (!VALID_DAYS.includes(normalizedDay)) {
       errors.push(
         `บรรทัดที่ ${rowNum} (${course_code}): วันเรียน "${dayRaw}" ไม่ถูกต้อง ต้องเป็น MON, TUE, WED, THU, FRI, SAT หรือ SUN`,
       )
@@ -181,7 +205,7 @@ export function parseScheduleCsvText(csvText: string): CsvParseResult {
       course_name,
       credits,
       section,
-      day: dayRaw as DayOfWeek,
+      day: normalizedDay,
       start,
       end,
       room,
@@ -192,7 +216,8 @@ export function parseScheduleCsvText(csvText: string): CsvParseResult {
     })
   }
 
-  return { items, errors }
+  const { merged: dedupedItems } = mergeScheduleWithoutDuplicates([], items)
+  return { items: dedupedItems, errors }
 }
 
 export function getSampleScheduleFromCsv(): CourseScheduleItem[] {
@@ -206,9 +231,12 @@ export function makeSessionDedupeKey(item: {
   course_code: string
   day: string
   start: string
-  end: string
+  end?: string
 }): string {
-  return `${item.course_code.trim().toUpperCase()}|${item.day.trim().toUpperCase()}|${item.start.trim()}|${item.end.trim()}`
+  const code = (item.course_code || '').trim().toUpperCase()
+  const day = normalizeDayCode(item.day || '')
+  const start = normalizeTimeStr(item.start || '')
+  return `${code}|${day}|${start}`
 }
 
 export function mergeScheduleWithoutDuplicates(
@@ -221,7 +249,29 @@ export function mergeScheduleWithoutDuplicates(
 } {
   const map = new Map<string, CourseScheduleItem>()
   for (const item of existing) {
-    map.set(makeSessionDedupeKey(item), { ...item })
+    const key = makeSessionDedupeKey(item)
+    const prev = map.get(key)
+    if (!prev) {
+      map.set(key, {
+        ...item,
+        course_code: item.course_code.trim().toUpperCase(),
+        day: normalizeDayCode(item.day),
+        start: normalizeTimeStr(item.start),
+        end: normalizeTimeStr(item.end),
+      })
+    } else {
+      map.set(key, {
+        ...prev,
+        ...item,
+        course_code: item.course_code.trim().toUpperCase(),
+        day: normalizeDayCode(item.day),
+        start: normalizeTimeStr(item.start),
+        end: normalizeTimeStr(item.end),
+        online_url: item.online_url || prev.online_url,
+        contact_url: item.contact_url || prev.contact_url,
+        online_link: item.online_link || prev.online_link,
+      })
+    }
   }
 
   let addedCount = 0
@@ -235,12 +285,21 @@ export function mergeScheduleWithoutDuplicates(
         ...prev,
         ...inc,
         course_code: inc.course_code.trim().toUpperCase(),
+        day: normalizeDayCode(inc.day),
+        start: normalizeTimeStr(inc.start),
+        end: normalizeTimeStr(inc.end),
+        online_url: inc.online_url || prev.online_url,
+        contact_url: inc.contact_url || prev.contact_url,
+        online_link: inc.online_link || prev.online_link,
       })
       updatedCount++
     } else {
       map.set(key, {
         ...inc,
         course_code: inc.course_code.trim().toUpperCase(),
+        day: normalizeDayCode(inc.day),
+        start: normalizeTimeStr(inc.start),
+        end: normalizeTimeStr(inc.end),
       })
       addedCount++
     }
@@ -443,6 +502,19 @@ class HybridSupabaseStorageAdapter implements StorageAdapter {
     // ผู้ใช้ที่ไม่ล็อกอินและไม่ใช่ลิงก์แชร์ ใช้ localStorage ตามเดิม
     if (!user || !supabase) {
       if (isShareRoute()) return null
+      const { baseKey } = parseKeyGroupSemester(key)
+      if (baseKey === 'class_sessions') {
+        const localList = await localStore.get<CourseScheduleItem[]>(key)
+        if (localList && Array.isArray(localList)) {
+          const { merged } = mergeScheduleWithoutDuplicates([], localList)
+          if (merged.length < localList.length) {
+            void localStore.set(key, merged)
+          }
+          return merged as unknown as T
+        }
+        return (localList ?? []) as unknown as T
+      }
+
       return localStore.get<T>(key)
     }
 
@@ -474,24 +546,57 @@ class HybridSupabaseStorageAdapter implements StorageAdapter {
         if (error) throw new Error(formatStorageErrorThai(error))
 
         const mapped: CourseScheduleItem[] = []
+        const seenKeys = new Set<string>()
+        const duplicateDbIds: string[] = []
+
         for (const row of data ?? []) {
           const decoded = decodeSectionAndSemester(row.section as string)
           if (decoded.semester !== semester) continue
 
-          mapped.push({
+          const code = (row.course_code as string).trim().toUpperCase()
+          const dayCode = normalizeDayCode(row.day as string)
+          const startTime = normalizeTimeStr(row.start_time as string)
+          const endTime = normalizeTimeStr(row.end_time as string)
+
+          const item: CourseScheduleItem = {
             id: row.id as string,
             group_id: row.group_id as string,
-            course_code: row.course_code as string,
+            course_code: code,
             course_name: row.course_name as string,
             credits: Number(row.credits ?? 3),
             section: decoded.section,
-            day: row.day as DayOfWeek,
-            start: row.start_time as string,
-            end: row.end_time as string,
+            day: dayCode,
+            start: startTime,
+            end: endTime,
             room: row.room as string,
             instructor: row.instructor as string,
             online_link: Boolean(row.online_link),
-          })
+            online_url: KNOWN_COURSE_LINKS[code]?.online_url,
+            contact_url: KNOWN_COURSE_LINKS[code]?.contact_url,
+          }
+
+          const dedupeKey = makeSessionDedupeKey(item)
+          if (seenKeys.has(dedupeKey)) {
+            if (row.id) {
+              duplicateDbIds.push(row.id as string)
+            }
+          } else {
+            seenKeys.add(dedupeKey)
+            mapped.push(item)
+          }
+        }
+
+        // ลบแถวซ้ำออกจากฐานข้อมูล Supabase อัตโนมัติ เพื่อไม่ให้มีข้อมูลซ้ำตกค้าง
+        if (duplicateDbIds.length > 0) {
+          void supabase
+            .from('class_sessions')
+            .delete()
+            .in('id', duplicateDbIds)
+            .then(({ error: delErr }) => {
+              if (delErr) {
+                console.warn('Auto-deleted duplicate class_sessions rows from DB:', duplicateDbIds.length)
+              }
+            })
         }
 
         return mapped as unknown as T
@@ -522,6 +627,18 @@ class HybridSupabaseStorageAdapter implements StorageAdapter {
 
         if (error) throw new Error(formatStorageErrorThai(error))
         return (data ?? []) as unknown as T
+      }
+
+      if (baseKey === 'class_sessions') {
+        const localList = await localStore.get<CourseScheduleItem[]>(key)
+        if (localList && Array.isArray(localList)) {
+          const { merged } = mergeScheduleWithoutDuplicates([], localList)
+          if (merged.length < localList.length) {
+            void localStore.set(key, merged)
+          }
+          return merged as unknown as T
+        }
+        return (localList ?? []) as unknown as T
       }
 
       return localStore.get<T>(key)

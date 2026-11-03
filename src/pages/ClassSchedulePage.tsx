@@ -285,7 +285,11 @@ export function ClassSchedulePage() {
           contact_url: s.contact_url || KNOWN_COURSE_LINKS[s.course_code]?.contact_url,
           online_link: s.online_link || Boolean(s.online_url || KNOWN_COURSE_LINKS[s.course_code]?.online_url),
         }))
-        setSessions(enriched)
+        const { merged: deduped } = mergeScheduleWithoutDuplicates([], enriched)
+        setSessions(deduped)
+        if (canEdit && deduped.length < list.length) {
+          void storage.set(storageKey, deduped)
+        }
       }
     } catch (err) {
       setErrorMessage(formatStorageErrorThai(err))
@@ -347,18 +351,58 @@ export function ClassSchedulePage() {
     try {
       window.localStorage.removeItem(`${CLEARED_SEMESTER_KEY_PREFIX}${storageKey}`)
       const sampleItems = getSampleScheduleFromCsv()
-      const { merged, addedCount, updatedCount } = mergeScheduleWithoutDuplicates(
-        sessions,
-        sampleItems,
-      )
-      await storage.set(storageKey, merged)
+      await storage.set(storageKey, sampleItems)
       if (user && !activeGroup) {
         await refreshGroupContext()
       }
       await loadSchedule()
       setStatusMessage(
-        `โหลดตารางเรียน ปี 4 เทอม 1 (2569/1) สำเร็จ! (เพิ่มใหม่ ${addedCount} คาบ, อัปเดตข้อมูลเดิม ${updatedCount} คาบ — รวม ${merged.length} วิชา 18 หน่วยกิต)`,
+        `โหลดตารางเรียน ปี 4 เทอม 1 (2569/1) สำเร็จ! (รวมทั้งหมด ${sampleItems.length} วิชา 18 หน่วยกิต ไม่มีวิชาซ้ำ)`,
       )
+    } catch (err) {
+      setErrorMessage(formatStorageErrorThai(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDeduplicateSchedule() {
+    if (!canEdit || sessions.length === 0) return
+    setSaving(true)
+    setErrorMessage(null)
+    setStatusMessage(null)
+
+    try {
+      const { merged } = mergeScheduleWithoutDuplicates([], sessions)
+      const diff = sessions.length - merged.length
+      await storage.set(storageKey, merged)
+      setSessions(merged)
+      if (diff > 0) {
+        setStatusMessage(
+          `ลบวิชาที่ซ้ำออกแล้ว ${diff} รายการ! คงเหลือ ${merged.length} วิชา (18 หน่วยกิต)`,
+        )
+      } else {
+        setStatusMessage(`ตารางเรียนเรียบร้อยดี ไม่มีรายการซ้ำ (ครบ ${merged.length} วิชา 18 หน่วยกิต)`)
+      }
+    } catch (err) {
+      setErrorMessage(formatStorageErrorThai(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDeleteSingleSession(item: CourseScheduleItem) {
+    if (!canEdit) return
+    setSaving(true)
+    setErrorMessage(null)
+    setStatusMessage(null)
+
+    try {
+      const targetKey = makeSessionDedupeKey(item)
+      const updated = sessions.filter((s) => makeSessionDedupeKey(s) !== targetKey)
+      await storage.set(storageKey, updated)
+      setSessions(updated)
+      setStatusMessage(`ลบวิชา ${item.course_code} (${item.course_name}) สำเร็จ`)
     } catch (err) {
       setErrorMessage(formatStorageErrorThai(err))
     } finally {
@@ -824,6 +868,16 @@ export function ClassSchedulePage() {
                 onClick={() => void handleLoadSampleSchedule()}
               >
                 โหลดตารางตัวอย่าง
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={saving || sessions.length === 0}
+                onClick={() => void handleDeduplicateSchedule()}
+                title="ตรวจสอบและลบวิชาที่ซ้ำออกทันที"
+              >
+                🧹 ล้างแถวซ้ำ
               </Button>
 
               <input
@@ -1336,7 +1390,8 @@ export function ClassSchedulePage() {
                     <th className="py-3 px-3">ห้องเรียน</th>
                     <th className="py-3 px-3">ผู้สอน</th>
                     <th className="py-3 px-3">ONLINE CLASSES</th>
-                    <th className="py-3 pr-5 text-center">รูปแบบการสอบ</th>
+                    <th className="py-3 px-3 text-center">รูปแบบการสอบ</th>
+                    {canEdit && <th className="py-3 pr-5 text-center">จัดการ</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -1443,9 +1498,24 @@ export function ClassSchedulePage() {
                             <span className="text-ink-muted">–</span>
                           )}
                         </td>
-                        <td className="py-4 pr-5 text-center">
+                        <td className="py-4 px-3 text-center">
                           <Badge tone="neutral">ไม่จัดสอบ</Badge>
                         </td>
+                        {canEdit && (
+                          <td className="py-4 pr-5 text-center whitespace-nowrap">
+                            <button
+                              type="button"
+                              title="ลบรายวิชานี้"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void handleDeleteSingleSession(s)
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-status-danger transition hover:bg-status-danger-soft"
+                            >
+                              🗑️ ลบ
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     )
                   })}
