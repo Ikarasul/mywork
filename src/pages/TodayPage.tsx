@@ -9,6 +9,7 @@ import {
   getCurrentMinutesOfDay,
   getTodayDayOfWeek,
 } from '../lib/dateThai'
+import { useGoogleCalendar } from '../lib/googleCalendar'
 import {
   DEFAULT_SEMESTER,
   getSampleScheduleFromCsv,
@@ -47,6 +48,7 @@ function getStatusMeta(status: TaskStatus) {
 
 export function TodayPage() {
   const { user, displayName, activeGroup, currentRole } = useAuth()
+  const gcal = useGoogleCalendar()
   const [sessions, setSessions] = useState<CourseScheduleItem[]>([])
   const [routines, setRoutines] = useState<RoutineItem[]>([])
   const [tasks, setTasks] = useState<TaskItem[]>([])
@@ -98,6 +100,13 @@ export function TodayPage() {
       .filter((r) => r.day === 'ALL' || r.day === todayCode)
       .sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time))
   }, [routines, todayCode])
+
+  const todayGcalEvents = useMemo(() => {
+    if (!gcal.overlayVisible) return []
+    return gcal.events
+      .filter((ev) => ev.day === todayCode)
+      .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime))
+  }, [gcal.events, gcal.overlayVisible, todayCode])
 
   const upcomingAssignments = useMemo(() => {
     return tasks
@@ -237,6 +246,53 @@ export function TodayPage() {
                 </div>
               </div>
             )}
+
+            <div className="mt-5 border-t border-line pt-4">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-bold text-ink-secondary uppercase">
+                  📆 Google Calendar วันนี้ ({todayGcalEvents.length})
+                </h3>
+                <button
+                  type="button"
+                  disabled={gcal.syncing}
+                  onClick={() => void gcal.syncNow()}
+                  className="text-[11px] font-bold text-primary hover:underline disabled:opacity-50"
+                >
+                  {gcal.syncing ? 'กำลังซิงก์...' : '🔄 ซิงก์ตอนนี้'}
+                </button>
+              </div>
+              {todayGcalEvents.length === 0 ? (
+                <p className="mt-1.5 text-xs text-ink-muted">
+                  {gcal.lastSyncedAt
+                    ? 'ไม่มีอีเวนต์ Google Calendar ในวันนี้'
+                    : 'ยังไม่ได้ซิงก์ปฏิทิน Google (กดซิงก์ตอนนี้เพื่อดึงข้อมูล)'}
+                </p>
+              ) : (
+                <div className="mt-2 space-y-2">
+                  {todayGcalEvents.slice(0, 4).map((ev, gIdx) => (
+                    <div
+                      key={`today-gcal-${ev.id}-${gIdx}`}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-accent-sky bg-accent-sky-soft/60 px-3 py-2 text-xs"
+                    >
+                      <div>
+                        <span className="font-bold text-ink">{ev.summary}</span>
+                        <span className="ml-2 font-mono text-[11px] text-ink-secondary">
+                          {ev.isAllDay ? '(ทั้งวัน)' : `${ev.startTime}–${ev.endTime}`}
+                        </span>
+                      </div>
+                      <a
+                        href={ev.htmlLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 text-[11px] font-bold text-primary underline"
+                      >
+                        แก้ไขใน Google ↗
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="mt-4 pt-3 border-t border-line flex justify-end">

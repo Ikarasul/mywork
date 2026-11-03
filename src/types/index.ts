@@ -145,6 +145,20 @@ export interface SharedViewPayload {
   }>
 }
 
+export interface GoogleCalendarEventItem {
+  id: string
+  summary: string
+  description: string
+  location: string
+  htmlLink: string
+  startIso: string
+  endIso: string
+  day: DayOfWeek
+  startTime: string
+  endTime: string
+  isAllDay: boolean
+}
+
 export interface StorageAdapter {
   get<T>(key: string): Promise<T | null>
   set<T>(key: string, value: T): Promise<void>

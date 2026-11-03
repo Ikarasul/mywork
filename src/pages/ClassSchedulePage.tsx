@@ -8,6 +8,9 @@ import {
   type FormEvent,
 } from 'react'
 import { Link } from 'react-router-dom'
+import GoogleCalendarSyncBar, {
+  GoogleCalendarEventModal,
+} from '../components/GoogleCalendarSyncBar'
 import {
   Badge,
   Button,
@@ -23,6 +26,7 @@ import {
   getCurrentMinutesOfDay,
   getTodayDayOfWeek,
 } from '../lib/dateThai'
+import { useGoogleCalendar } from '../lib/googleCalendar'
 import {
   DEFAULT_SEMESTER,
   formatStorageErrorThai,
@@ -33,7 +37,7 @@ import {
   storage,
   timeToMinutes,
 } from '../lib/storage'
-import type { CourseScheduleItem, DayOfWeek } from '../types'
+import type { CourseScheduleItem, DayOfWeek, GoogleCalendarEventItem } from '../types'
 
 interface SemesterOption {
   id: string
@@ -194,6 +198,10 @@ const CLEARED_SEMESTER_KEY_PREFIX = 'lsp:cleared_semester:'
 
 export function ClassSchedulePage() {
   const { user, activeGroup, currentRole, refreshGroupContext } = useAuth()
+  const gcal = useGoogleCalendar()
+  const [selectedGcalEvent, setSelectedGcalEvent] = useState<GoogleCalendarEventItem | null>(
+    null,
+  )
 
   const todayCode = useMemo(() => getTodayDayOfWeek(), [])
   const [selectedMobileDay, setSelectedMobileDay] = useState<DayOfWeek>(todayCode)
@@ -521,6 +529,9 @@ export function ClassSchedulePage() {
           <div className="divide-y divide-line">
             {daysToShow.map((dayCode) => {
               const daySessions = sessions.filter((s) => s.day === dayCode)
+              const dayGcalEvents = gcal.overlayVisible
+                ? gcal.events.filter((ev) => ev.day === dayCode)
+                : []
               const isToday = dayCode === todayCode
 
               return (
@@ -556,7 +567,7 @@ export function ClassSchedulePage() {
 
                   {/* พื้นที่ CSS Grid 26 ช่อง (07:00 - 20:00 ช่องละ 30 นาที) */}
                   <div
-                    className="relative grid items-center py-1.5"
+                    className="relative grid items-center gap-y-1 py-1.5"
                     style={{
                       gridColumn: `2 / span ${TOTAL_HALF_HOUR_SLOTS}`,
                       gridTemplateColumns: `repeat(${TOTAL_HALF_HOUR_SLOTS}, minmax(0, 1fr))`,
@@ -577,7 +588,7 @@ export function ClassSchedulePage() {
                         key={`line-${dayCode}-${hIdx}`}
                         style={{
                           gridColumn: `${hIdx * 2 + 1} / span 2`,
-                          gridRow: 1,
+                          gridRow: '1 / span 2',
                         }}
                         className="pointer-events-none h-full border-r border-dashed border-line"
                       />
@@ -640,6 +651,45 @@ export function ClassSchedulePage() {
                             <span>📍 {sess.room || '-'}</span>
                             <span className="font-mono">
                               {sess.start}–{sess.end}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+
+                    {/* กล่องอีเวนต์ Google Calendar ที่ซ้อนทับแบบอ่านอย่างเดียว (แถวที่ 2 ในวันเดียวกัน) */}
+                    {dayGcalEvents.map((ev, gIdx) => {
+                      const startMin = Math.max(
+                        GRID_START_MIN,
+                        Math.min(GRID_END_MIN - 30, timeToMinutes(ev.startTime)),
+                      )
+                      const endMin = Math.max(
+                        startMin + 30,
+                        Math.min(GRID_END_MIN, timeToMinutes(ev.endTime)),
+                      )
+
+                      const startSlot =
+                        Math.floor((startMin - GRID_START_MIN) / 30) + 1
+                      const spanSlots = Math.max(
+                        1,
+                        Math.ceil((endMin - startMin) / 30),
+                      )
+
+                      return (
+                        <div
+                          key={`gcal-${ev.id}-${gIdx}`}
+                          style={{
+                            gridColumn: `${startSlot} / span ${spanSlots}`,
+                            gridRow: 2,
+                          }}
+                          onClick={() => setSelectedGcalEvent(ev)}
+                          title={`[Google Calendar] ${ev.summary} (${ev.isAllDay ? 'ทั้งวัน' : `${ev.startTime}-${ev.endTime}`}) — คลิกเพื่อดูหรือแก้ไขใน Google Calendar`}
+                          className="z-10 mx-0.5 cursor-pointer rounded-xl border border-dashed border-accent-sky bg-accent-sky-soft/75 p-1.5 text-[11px] text-accent-sky-fg shadow-2xs transition hover:opacity-95"
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-bold">📆 {ev.summary}</span>
+                            <span className="font-mono text-[10px]">
+                              {ev.isAllDay ? 'ทั้งวัน' : `${ev.startTime}–${ev.endTime}`}
                             </span>
                           </div>
                         </div>
@@ -780,6 +830,24 @@ export function ClassSchedulePage() {
             </div>
           </div>
         )}
+
+        {/* แถบซิงก์ปฏิทิน Google Calendar แบบอ่านอย่างเดียว (G3) */}
+        <div className="mt-4">
+          <GoogleCalendarSyncBar
+            eventsCount={gcal.events.length}
+            lastSyncedAt={gcal.lastSyncedAt}
+            weekRangeLabel={gcal.weekRangeLabel}
+            overlayVisible={gcal.overlayVisible}
+            onToggleOverlay={gcal.setOverlayVisible}
+            syncing={gcal.syncing}
+            syncError={gcal.syncError}
+            syncSuccessMessage={gcal.syncSuccessMessage}
+            onClearError={() => gcal.setSyncError(null)}
+            onClearSuccess={() => gcal.setSyncSuccessMessage(null)}
+            onSyncNow={() => void gcal.syncNow()}
+            onClearEvents={gcal.clearSyncedEvents}
+          />
+        </div>
 
         {/* แจ้งเตือนสำหรับผู้ชมที่ล็อกอินแต่ยังไม่มีรหัสเชิญ */}
         {isLoggedInViewer && (
@@ -1017,6 +1085,12 @@ export function ClassSchedulePage() {
         )}
       </Card>
 
+      {/* กล่องแสดงรายละเอียดอีเวนต์ Google Calendar + ปุ่มแก้ไขใน Google Calendar */}
+      <GoogleCalendarEventModal
+        event={selectedGcalEvent}
+        onClose={() => setSelectedGcalEvent(null)}
+      />
+
       {/* กล่องยืนยันการล้างตาราง */}
       <ConfirmDialog
         open={showClearConfirm && canClearSchedule}
@@ -1124,6 +1198,40 @@ export function ClassSchedulePage() {
                     )
                   })
               )}
+
+              {/* อีเวนต์จาก Google Calendar ของวันที่เลือกบนมือถือ */}
+              {gcal.overlayVisible &&
+                gcal.events
+                  .filter((ev) => ev.day === selectedMobileDay)
+                  .map((ev, gIdx) => (
+                    <div
+                      key={`mob-gcal-${ev.id}-${gIdx}`}
+                      onClick={() => setSelectedGcalEvent(ev)}
+                      className="cursor-pointer rounded-xl border border-dashed border-accent-sky bg-accent-sky-soft/70 p-3.5 text-accent-sky-fg shadow-2xs"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <Badge tone="sky">📆 Google Calendar</Badge>
+                        <span className="font-mono text-xs font-bold">
+                          {ev.isAllDay ? 'ตลอดทั้งวัน' : `${ev.startTime} – ${ev.endTime}`}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-sm font-bold text-ink">{ev.summary}</p>
+                      <div className="mt-2 flex items-center justify-between text-xs">
+                        <span className="text-ink-secondary">
+                          {ev.location ? `📍 ${ev.location}` : 'อ่านอย่างเดียว'}
+                        </span>
+                        <a
+                          href={ev.htmlLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="font-bold text-primary underline"
+                        >
+                          แก้ไขใน Google Calendar ↗
+                        </a>
+                      </div>
+                    </div>
+                  ))}
             </div>
           </div>
 

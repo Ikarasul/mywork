@@ -7,6 +7,7 @@ import { ThemeProvider } from './lib/theme'
 import TodayPage from './pages/TodayPage'
 import LifeSchedulePage from './pages/LifeSchedulePage'
 import ClassSchedulePage from './pages/ClassSchedulePage'
+import CalendarPage from './pages/CalendarPage'
 import TasksPage from './pages/TasksPage'
 import GroupChatPage from './pages/GroupChatPage'
 import LoginPage from './pages/LoginPage'
@@ -35,6 +36,7 @@ export function App() {
               <Route path="/share/:token" element={<SharedViewPage />} />
               <Route path="/life" element={<LifeSchedulePage />} />
               <Route path="/schedule" element={<ClassSchedulePage />} />
+              <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/tasks" element={<TasksPage />} />
               <Route path="/chat" element={<GroupChatPage />} />
               <Route path="*" element={<NotFoundPage />} />

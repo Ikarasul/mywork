@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import GoogleCalendarSyncBar, {
+  GoogleCalendarEventModal,
+} from '../components/GoogleCalendarSyncBar'
 import {
   Badge,
   Button,
@@ -13,8 +16,14 @@ import {
   getCurrentMinutesOfDay,
   getTodayDayOfWeek,
 } from '../lib/dateThai'
+import { useGoogleCalendar } from '../lib/googleCalendar'
 import { formatStorageErrorThai, storage, timeToMinutes } from '../lib/storage'
-import type { DayOfWeek, RoutineDay, RoutineItem } from '../types'
+import type {
+  DayOfWeek,
+  GoogleCalendarEventItem,
+  RoutineDay,
+  RoutineItem,
+} from '../types'
 
 const DAYS_ORDER: DayOfWeek[] = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
 const TABLET_DAYS: DayOfWeek[] = ['MON', 'TUE', 'WED', 'THU', 'FRI']
@@ -42,6 +51,10 @@ const SHORT_DAY_LABELS: Record<DayOfWeek, string> = {
 
 export function LifeSchedulePage() {
   const { user } = useAuth()
+  const gcal = useGoogleCalendar()
+  const [selectedGcalEvent, setSelectedGcalEvent] = useState<GoogleCalendarEventItem | null>(
+    null,
+  )
   const todayCode = useMemo(() => getTodayDayOfWeek(), [])
   const [selectedMobileDay, setSelectedMobileDay] = useState<DayOfWeek>(todayCode)
   const nowMinutes = useMemo(() => getCurrentMinutesOfDay(), [])
@@ -127,6 +140,13 @@ export function LifeSchedulePage() {
       .sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time))
   }
 
+  function getGcalEventsForDay(d: DayOfWeek) {
+    if (!gcal.overlayVisible) return []
+    return gcal.events
+      .filter((ev) => ev.day === d)
+      .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime))
+  }
+
   return (
     <div className="space-y-6">
       <Card>
@@ -150,6 +170,23 @@ export function LifeSchedulePage() {
           >
             {showAddForm ? 'ซ่อนฟอร์ม' : '+ เพิ่มกิจวัตรใหม่'}
           </Button>
+        </div>
+
+        <div className="mt-4">
+          <GoogleCalendarSyncBar
+            eventsCount={gcal.events.length}
+            lastSyncedAt={gcal.lastSyncedAt}
+            weekRangeLabel={gcal.weekRangeLabel}
+            overlayVisible={gcal.overlayVisible}
+            onToggleOverlay={gcal.setOverlayVisible}
+            syncing={gcal.syncing}
+            syncError={gcal.syncError}
+            syncSuccessMessage={gcal.syncSuccessMessage}
+            onClearError={() => gcal.setSyncError(null)}
+            onClearSuccess={() => gcal.setSyncSuccessMessage(null)}
+            onSyncNow={() => void gcal.syncNow()}
+            onClearEvents={gcal.clearSyncedEvents}
+          />
         </div>
 
         {errorMessage && (
@@ -244,14 +281,19 @@ export function LifeSchedulePage() {
         )}
       </Card>
 
+      <GoogleCalendarEventModal
+        event={selectedGcalEvent}
+        onClose={() => setSelectedGcalEvent(null)}
+      />
+
       {loading ? (
         <Skeleton lines={4} label="แมวเหมียวกำลังจัดตารางชีวิตให้คุณ..." />
-      ) : items.length === 0 ? (
+      ) : items.length === 0 && (!gcal.overlayVisible || gcal.events.length === 0) ? (
         <Card>
           <EmptyState
             mood="happy"
             title="ยังไม่มีรายการตารางชีวิต"
-            description="ออกแบบตารางชีวิตประจำวันของคุณ เช่น เวลาอ่านหนังสือ ออกกำลังกาย หรือพักผ่อน"
+            description="ออกแบบตารางชีวิตประจำวันของคุณ เช่น เวลาอ่านหนังสือ ออกกำลังกาย หรือพักผ่อน หรือกดซิงก์ Google Calendar ด้านบน"
             action={
               <Button variant="primary" size="sm" onClick={() => setShowAddForm(true)}>
                 + เริ่มเพิ่มกิจกรรมแรก
@@ -263,7 +305,11 @@ export function LifeSchedulePage() {
         <Card>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-base font-bold text-ink">
-              ตารางชีวิตตามวัน ({items.length} กิจกรรม)
+              ตารางชีวิตตามวัน ({items.length} กิจกรรม
+              {gcal.overlayVisible && gcal.events.length > 0
+                ? ` • ${gcal.events.length} อีเวนต์ Google`
+                : ''}
+              )
             </h2>
             <Badge tone="primary">● วันนี้: วัน{DAY_LABELS[todayCode]}</Badge>
           </div>
@@ -330,6 +376,34 @@ export function LifeSchedulePage() {
                   </div>
                 )
               })}
+
+              {getGcalEventsForDay(selectedMobileDay).map((ev, gIdx) => (
+                <div
+                  key={`life-mob-gcal-${ev.id}-${gIdx}`}
+                  onClick={() => setSelectedGcalEvent(ev)}
+                  className="cursor-pointer rounded-xl border border-dashed border-accent-sky bg-accent-sky-soft/70 p-3.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-xs font-bold text-accent-sky-fg">
+                      {ev.isAllDay ? 'ตลอดทั้งวัน' : `${ev.startTime} – ${ev.endTime}`}
+                    </span>
+                    <Badge tone="sky">📆 Google Calendar</Badge>
+                  </div>
+                  <p className="mt-1 text-sm font-bold text-ink">{ev.summary}</p>
+                  <div className="mt-1.5 flex items-center justify-between text-xs">
+                    <span className="text-ink-muted">อ่านอย่างเดียว</span>
+                    <a
+                      href={ev.htmlLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-bold text-primary underline"
+                    >
+                      แก้ไขใน Google Calendar ↗
+                    </a>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -338,6 +412,7 @@ export function LifeSchedulePage() {
             {TABLET_DAYS.map((d) => {
               const isToday = d === todayCode
               const dayItems = getRoutinesForDay(d)
+              const dayGcal = getGcalEventsForDay(d)
               return (
                 <div
                   key={`tab-life-${d}`}
@@ -368,6 +443,18 @@ export function LifeSchedulePage() {
                         </button>
                       </div>
                     ))}
+                    {dayGcal.map((ev, gIdx) => (
+                      <div
+                        key={`tab-gcal-${d}-${ev.id}-${gIdx}`}
+                        onClick={() => setSelectedGcalEvent(ev)}
+                        className="cursor-pointer rounded-lg border border-dashed border-accent-sky bg-accent-sky-soft/75 p-2 text-xs text-accent-sky-fg"
+                      >
+                        <div className="font-mono text-[10px] font-bold">
+                          📆 {ev.isAllDay ? 'ทั้งวัน' : `${ev.startTime}–${ev.endTime}`}
+                        </div>
+                        <div className="font-bold text-ink">{ev.summary}</div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )
@@ -378,6 +465,7 @@ export function LifeSchedulePage() {
             {DAYS_ORDER.map((d) => {
               const isToday = d === todayCode
               const dayItems = getRoutinesForDay(d)
+              const dayGcal = getGcalEventsForDay(d)
               return (
                 <div
                   key={`desk-life-${d}`}
@@ -406,6 +494,18 @@ export function LifeSchedulePage() {
                         >
                           ลบ
                         </button>
+                      </div>
+                    ))}
+                    {dayGcal.map((ev, gIdx) => (
+                      <div
+                        key={`desk-gcal-${d}-${ev.id}-${gIdx}`}
+                        onClick={() => setSelectedGcalEvent(ev)}
+                        className="cursor-pointer rounded-lg border border-dashed border-accent-sky bg-accent-sky-soft/75 p-2 text-xs text-accent-sky-fg"
+                      >
+                        <div className="font-mono text-[10px] font-bold">
+                          📆 {ev.isAllDay ? 'ทั้งวัน' : `${ev.startTime}–${ev.endTime}`}
+                        </div>
+                        <div className="font-bold text-ink">{ev.summary}</div>
                       </div>
                     ))}
                   </div>

@@ -26,6 +26,17 @@ const timeFormatter = new Intl.DateTimeFormat('th-TH', {
   minute: '2-digit',
 })
 
+const monthYearFormatter = new Intl.DateTimeFormat('th-TH', {
+  month: 'long',
+  year: 'numeric',
+})
+
+export function formatMonthYearThai(dateInput: Date | string = new Date()): string {
+  const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
+  if (Number.isNaN(d.getTime())) return '-'
+  return monthYearFormatter.format(d)
+}
+
 export function formatFullDateThai(dateInput: Date | string = new Date()): string {
   const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
   if (Number.isNaN(d.getTime())) return '-'

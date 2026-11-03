@@ -11,6 +11,8 @@ import { isSupabaseConfigured, supabase } from './supabase'
 import type { EffectiveRole, GroupInfo, GroupMemberWithProfile, GroupRole } from '../types'
 
 const ACTIVE_GROUP_STORAGE_KEY = 'lsp:active_group_id'
+export const GOOGLE_PROVIDER_TOKEN_STORAGE_KEY = 'lsp:google_provider_token'
+export const GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
 
 export function getRoleLabelThai(role: EffectiveRole): string {
   switch (role) {
@@ -66,6 +68,7 @@ export function formatSupabaseErrorThai(error: unknown): string {
 interface AuthContextValue {
   user: User | null
   session: Session | null
+  googleProviderToken: string | null
   displayName: string
   loading: boolean
   groups: GroupInfo[]
@@ -75,6 +78,10 @@ interface AuthContextValue {
   setActiveGroupId: (groupId: string) => void
   refreshGroupContext: () => Promise<void>
   signInWithMagicLink: (email: string, displayName?: string) => Promise<{ error: string | null }>
+  signInWithGoogle: (options?: {
+    withCalendarScope?: boolean
+    redirectPath?: string
+  }) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
 }
 
@@ -83,6 +90,13 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
+  const [googleProviderToken, setGoogleProviderToken] = useState<string | null>(() => {
+    try {
+      return window.sessionStorage.getItem(GOOGLE_PROVIDER_TOKEN_STORAGE_KEY)
+    } catch {
+      return null
+    }
+  })
   const [displayName, setDisplayName] = useState<string>('ผู้ชม')
   const [loading, setLoading] = useState<boolean>(isSupabaseConfigured)
   const [groups, setGroups] = useState<GroupInfo[]>([])
@@ -117,6 +131,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // ดึงหรือสร้างโปรไฟล์ของผู้ใช้
       const fallbackName =
         (user.user_metadata?.display_name as string | undefined) ||
+        (user.user_metadata?.full_name as string | undefined) ||
+        (user.user_metadata?.name as string | undefined) ||
         user.email?.split('@')[0] ||
         'ผู้ใช้งาน'
 
@@ -235,6 +251,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return
       setSession(data.session)
       setUser(data.session?.user ?? null)
+      if (data.session?.provider_token) {
+        setGoogleProviderToken(data.session.provider_token)
+        try {
+          window.sessionStorage.setItem(
+            GOOGLE_PROVIDER_TOKEN_STORAGE_KEY,
+            data.session.provider_token,
+          )
+        } catch {
+          // ignore storage errors
+        }
+      }
       setLoading(false)
     })
 
@@ -244,11 +271,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return
       setSession(newSession)
       setUser(newSession?.user ?? null)
+      if (newSession?.provider_token) {
+        setGoogleProviderToken(newSession.provider_token)
+        try {
+          window.sessionStorage.setItem(
+            GOOGLE_PROVIDER_TOKEN_STORAGE_KEY,
+            newSession.provider_token,
+          )
+        } catch {
+          // ignore storage errors
+        }
+      }
       if (!newSession?.user) {
         setDisplayName('ผู้ชม')
         setCurrentRole('viewer')
         setGroups([])
         setMembers([])
+        setGoogleProviderToken(null)
+        try {
+          window.sessionStorage.removeItem(GOOGLE_PROVIDER_TOKEN_STORAGE_KEY)
+        } catch {
+          // ignore storage errors
+        }
       }
     })
 
@@ -294,11 +338,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const signInWithGoogle = useCallback(
+    async (options?: {
+      withCalendarScope?: boolean
+      redirectPath?: string
+    }): Promise<{ error: string | null }> => {
+      if (!supabase) {
+        return { error: 'ยังไม่ได้ตั้งค่าการเชื่อมต่อฐานข้อมูล Supabase ใน .env.local' }
+      }
+      try {
+        const redirectTo = options?.redirectPath
+          ? `${window.location.origin}${options.redirectPath}`
+          : `${window.location.origin}/login`
+
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo,
+            scopes: options?.withCalendarScope ? GOOGLE_CALENDAR_SCOPE : undefined,
+            queryParams: options?.withCalendarScope
+              ? {
+                  access_type: 'online',
+                  prompt: 'consent',
+                }
+              : undefined,
+          },
+        })
+        if (error) {
+          return { error: formatSupabaseErrorThai(error) }
+        }
+        return { error: null }
+      } catch (err) {
+        return { error: formatSupabaseErrorThai(err) }
+      }
+    },
+    [],
+  )
+
   const signOut = useCallback(async () => {
     if (!supabase) return
     await supabase.auth.signOut()
     setUser(null)
     setSession(null)
+    setGoogleProviderToken(null)
+    try {
+      window.sessionStorage.removeItem(GOOGLE_PROVIDER_TOKEN_STORAGE_KEY)
+    } catch {
+      // ignore storage errors
+    }
     setCurrentRole('viewer')
     setGroups([])
     setMembers([])
@@ -311,6 +398,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         session,
+        googleProviderToken,
         displayName,
         loading,
         groups,
@@ -320,6 +408,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setActiveGroupId,
         refreshGroupContext,
         signInWithMagicLink,
+        signInWithGoogle,
         signOut,
       }}
     >

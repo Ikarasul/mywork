@@ -1,0 +1,380 @@
+import { useCallback, useEffect, useState } from 'react'
+import { GOOGLE_PROVIDER_TOKEN_STORAGE_KEY, useAuth } from './auth'
+import type { DayOfWeek, GoogleCalendarEventItem } from '../types'
+
+const GCAL_CACHE_STORAGE_KEY = 'lsp:gcal_events_cache'
+const GCAL_OVERLAY_STORAGE_KEY = 'lsp:gcal_overlay_visible'
+const GCAL_PENDING_SYNC_KEY = 'lsp:gcal_pending_sync'
+const GCAL_UPDATE_EVENT = 'lsp:gcal-updated'
+
+interface GoogleCalendarCachePayload {
+  events: GoogleCalendarEventItem[]
+  lastSyncedAt: string | null
+  weekRangeLabel: string
+}
+
+interface RawGoogleCalendarEvent {
+  id?: string
+  status?: string
+  summary?: string
+  description?: string
+  location?: string
+  htmlLink?: string
+  start?: {
+    dateTime?: string
+    date?: string
+  }
+  end?: {
+    dateTime?: string
+    date?: string
+  }
+}
+
+function toDayOfWeek(date: Date): DayOfWeek {
+  const map: DayOfWeek[] = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+  return map[date.getDay()] ?? 'MON'
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
+function formatHHMM(date: Date): string {
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+}
+
+export function getCurrentWeekBounds(reference: Date = new Date()): {
+  monday: Date
+  sunday: Date
+  weekRangeLabel: string
+} {
+  const now = new Date(reference)
+  const jsDay = now.getDay() // 0 = Sun, 1 = Mon, ...
+  const diffToMonday = jsDay === 0 ? -6 : 1 - jsDay
+
+  const monday = new Date(now)
+  monday.setDate(now.getDate() + diffToMonday)
+  monday.setHours(0, 0, 0, 0)
+
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  sunday.setHours(23, 59, 59, 999)
+
+  const fmt = new Intl.DateTimeFormat('th-TH', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+
+  return {
+    monday,
+    sunday,
+    weekRangeLabel: `${fmt.format(monday)} – ${fmt.format(sunday)}`,
+  }
+}
+
+function readCachedCalendar(): GoogleCalendarCachePayload {
+  try {
+    const raw = window.localStorage.getItem(GCAL_CACHE_STORAGE_KEY)
+    if (!raw) {
+      return {
+        events: [],
+        lastSyncedAt: null,
+        weekRangeLabel: getCurrentWeekBounds().weekRangeLabel,
+      }
+    }
+    const parsed = JSON.parse(raw) as Partial<GoogleCalendarCachePayload>
+    return {
+      events: Array.isArray(parsed.events) ? parsed.events : [],
+      lastSyncedAt: typeof parsed.lastSyncedAt === 'string' ? parsed.lastSyncedAt : null,
+      weekRangeLabel:
+        typeof parsed.weekRangeLabel === 'string'
+          ? parsed.weekRangeLabel
+          : getCurrentWeekBounds().weekRangeLabel,
+    }
+  } catch {
+    return {
+      events: [],
+      lastSyncedAt: null,
+      weekRangeLabel: getCurrentWeekBounds().weekRangeLabel,
+    }
+  }
+}
+
+function writeCachedCalendar(payload: GoogleCalendarCachePayload) {
+  try {
+    window.localStorage.setItem(GCAL_CACHE_STORAGE_KEY, JSON.stringify(payload))
+    window.dispatchEvent(new CustomEvent(GCAL_UPDATE_EVENT))
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function readOverlayVisible(): boolean {
+  try {
+    const raw = window.localStorage.getItem(GCAL_OVERLAY_STORAGE_KEY)
+    return raw === null ? true : raw === 'true'
+  } catch {
+    return true
+  }
+}
+
+function mapRawGoogleEvents(rawItems: RawGoogleCalendarEvent[]): GoogleCalendarEventItem[] {
+  const mapped: GoogleCalendarEventItem[] = []
+
+  for (const item of rawItems) {
+    if (!item || item.status === 'cancelled') continue
+
+    const summary = item.summary?.trim() || '(ไม่มีชื่อกิจกรรม)'
+    const description = item.description?.trim() || ''
+    const location = item.location?.trim() || ''
+    const htmlLink = item.htmlLink || 'https://calendar.google.com'
+
+    if (item.start?.dateTime) {
+      const startDate = new Date(item.start.dateTime)
+      const endDate = item.end?.dateTime ? new Date(item.end.dateTime) : new Date(startDate.getTime() + 60 * 60 * 1000)
+
+      if (Number.isNaN(startDate.getTime())) continue
+
+      const startTime = formatHHMM(startDate)
+      let endTime = formatHHMM(endDate)
+      if (endTime <= startTime) {
+        const fallbackEnd = new Date(startDate.getTime() + 60 * 60 * 1000)
+        endTime = formatHHMM(fallbackEnd)
+      }
+
+      mapped.push({
+        id: item.id || `${startDate.toISOString()}-${summary}`,
+        summary,
+        description,
+        location,
+        htmlLink,
+        startIso: startDate.toISOString(),
+        endIso: endDate.toISOString(),
+        day: toDayOfWeek(startDate),
+        startTime,
+        endTime,
+        isAllDay: false,
+      })
+    } else if (item.start?.date) {
+      // กิจกรรมแบบทั้งวัน (All-day event)
+      const [y, m, d] = item.start.date.split('-').map(Number)
+      if (!y || !m || !d) continue
+      const startDate = new Date(y, m - 1, d, 8, 0, 0)
+      const endDate = new Date(y, m - 1, d, 9, 0, 0)
+
+      mapped.push({
+        id: item.id || `${item.start.date}-${summary}`,
+        summary,
+        description,
+        location,
+        htmlLink,
+        startIso: startDate.toISOString(),
+        endIso: endDate.toISOString(),
+        day: toDayOfWeek(startDate),
+        startTime: '08:00',
+        endTime: '09:00',
+        isAllDay: true,
+      })
+    }
+  }
+
+  return mapped.sort((a, b) => a.startTime.localeCompare(b.startTime))
+}
+
+export async function fetchGoogleCalendarWeekEvents(
+  accessToken: string,
+): Promise<{
+  events: GoogleCalendarEventItem[]
+  weekRangeLabel: string
+}> {
+  const { monday, sunday, weekRangeLabel } = getCurrentWeekBounds()
+
+  const params = new URLSearchParams({
+    timeMin: monday.toISOString(),
+    timeMax: sunday.toISOString(),
+    singleEvents: 'true',
+    orderBy: 'startTime',
+    maxResults: '250',
+  })
+
+  const response = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    },
+  )
+
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      const errorBody = await response.json().catch(() => null)
+      const rawMessage =
+        errorBody?.error?.message || 'สิทธิ์การเข้าถึงปฏิทินหมดอายุหรือยังไม่ได้อนุญาต Scope'
+      const err = new Error(rawMessage) as Error & { status?: number }
+      err.status = response.status
+      throw err
+    }
+    throw new Error(`ไม่สามารถดึงข้อมูล Google Calendar ได้ (HTTP ${response.status})`)
+  }
+
+  const data = (await response.json()) as { items?: RawGoogleCalendarEvent[] }
+  const events = mapRawGoogleEvents(data.items ?? [])
+
+  return { events, weekRangeLabel }
+}
+
+export function useGoogleCalendar() {
+  const { googleProviderToken, signInWithGoogle } = useAuth()
+  const [cache, setCache] = useState<GoogleCalendarCachePayload>(() => readCachedCalendar())
+  const [overlayVisible, setOverlayVisibleState] = useState<boolean>(() => readOverlayVisible())
+  const [syncing, setSyncing] = useState<boolean>(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
+  const [syncSuccessMessage, setSyncSuccessMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    function handleUpdate() {
+      setCache(readCachedCalendar())
+      setOverlayVisibleState(readOverlayVisible())
+    }
+    window.addEventListener(GCAL_UPDATE_EVENT, handleUpdate)
+    window.addEventListener('storage', handleUpdate)
+    return () => {
+      window.removeEventListener(GCAL_UPDATE_EVENT, handleUpdate)
+      window.removeEventListener('storage', handleUpdate)
+    }
+  }, [])
+
+  const setOverlayVisible = useCallback((visible: boolean) => {
+    setOverlayVisibleState(visible)
+    try {
+      window.localStorage.setItem(GCAL_OVERLAY_STORAGE_KEY, String(visible))
+      window.dispatchEvent(new CustomEvent(GCAL_UPDATE_EVENT))
+    } catch {
+      // ignore storage errors
+    }
+  }, [])
+
+  const performSyncWithToken = useCallback(async (token: string) => {
+    setSyncing(true)
+    setSyncError(null)
+    setSyncSuccessMessage(null)
+
+    try {
+      const { events, weekRangeLabel } = await fetchGoogleCalendarWeekEvents(token)
+      const nowIso = new Date().toISOString()
+      const nextPayload: GoogleCalendarCachePayload = {
+        events,
+        lastSyncedAt: nowIso,
+        weekRangeLabel,
+      }
+      writeCachedCalendar(nextPayload)
+      setCache(nextPayload)
+      setSyncSuccessMessage(
+        `ซิงก์ Google Calendar สำเร็จ! ดึงข้อมูลสัปดาห์นี้ (${weekRangeLabel}) มาแสดง ${events.length} รายการ`,
+      )
+      return { ok: true, needsReauth: false }
+    } catch (err) {
+      const status = (err as { status?: number })?.status
+      if (status === 401 || status === 403) {
+        try {
+          window.sessionStorage.removeItem(GOOGLE_PROVIDER_TOKEN_STORAGE_KEY)
+        } catch {
+          // ignore
+        }
+        return { ok: false, needsReauth: true }
+      }
+      const message =
+        err instanceof Error ? err.message : 'เกิดข้อผิดพลาดขณะซิงก์ปฏิทิน Google'
+      setSyncError(message)
+      return { ok: false, needsReauth: false }
+    } finally {
+      setSyncing(false)
+    }
+  }, [])
+
+  // เมื่อกลับมาจากหน้าขอสิทธิ์ Google OAuth ที่ผู้ใช้กดปุ่มซิงก์ไว้ ให้ดึงข้อมูล 1 ครั้งทันที
+  useEffect(() => {
+    let pending = false
+    try {
+      pending = window.sessionStorage.getItem(GCAL_PENDING_SYNC_KEY) === 'true'
+    } catch {
+      pending = false
+    }
+
+    if (pending && googleProviderToken) {
+      try {
+        window.sessionStorage.removeItem(GCAL_PENDING_SYNC_KEY)
+      } catch {
+        // ignore
+      }
+      void performSyncWithToken(googleProviderToken)
+    }
+  }, [googleProviderToken, performSyncWithToken])
+
+  const syncNow = useCallback(async () => {
+    setSyncError(null)
+    setSyncSuccessMessage(null)
+
+    // หากมี token อยู่แล้ว ให้ลองดึงข้อมูลทันที
+    if (googleProviderToken) {
+      const result = await performSyncWithToken(googleProviderToken)
+      if (result.ok || !result.needsReauth) {
+        return
+      }
+    }
+
+    // หากยังไม่มี token หรือ token หมดอายุ/ยังไม่ได้ขอ scope calendar.readonly ให้ส่งไปขอสิทธิ์ OAuth
+    try {
+      window.sessionStorage.setItem(GCAL_PENDING_SYNC_KEY, 'true')
+    } catch {
+      // ignore
+    }
+
+    const currentPath = window.location.pathname || '/schedule'
+    const { error } = await signInWithGoogle({
+      withCalendarScope: true,
+      redirectPath: currentPath,
+    })
+
+    if (error) {
+      try {
+        window.sessionStorage.removeItem(GCAL_PENDING_SYNC_KEY)
+      } catch {
+        // ignore
+      }
+      setSyncError(error)
+    }
+  }, [googleProviderToken, performSyncWithToken, signInWithGoogle])
+
+  const clearSyncedEvents = useCallback(() => {
+    const emptyPayload: GoogleCalendarCachePayload = {
+      events: [],
+      lastSyncedAt: null,
+      weekRangeLabel: getCurrentWeekBounds().weekRangeLabel,
+    }
+    writeCachedCalendar(emptyPayload)
+    setCache(emptyPayload)
+    setSyncSuccessMessage(null)
+    setSyncError(null)
+  }, [])
+
+  return {
+    events: cache.events,
+    lastSyncedAt: cache.lastSyncedAt,
+    weekRangeLabel: cache.weekRangeLabel,
+    overlayVisible,
+    setOverlayVisible,
+    syncing,
+    syncError,
+    syncSuccessMessage,
+    setSyncError,
+    setSyncSuccessMessage,
+    syncNow,
+    clearSyncedEvents,
+    hasToken: Boolean(googleProviderToken),
+  }
+}

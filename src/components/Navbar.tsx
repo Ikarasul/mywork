@@ -9,6 +9,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { path: '/life', label: 'ตารางชีวิต' },
   { path: '/schedule', label: 'ตารางเรียน' },
+  { path: '/calendar', label: 'ปฏิทิน' },
   { path: '/tasks', label: 'งาน/การบ้าน/สอบ' },
   { path: '/chat', label: 'แชทกลุ่ม' },
   { path: '/group', label: 'จัดการกลุ่ม' },
