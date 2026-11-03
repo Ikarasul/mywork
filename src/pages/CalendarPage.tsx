@@ -537,67 +537,100 @@ export function CalendarPage() {
         </div>
       </Card>
 
-      {/* แถบควบคุมมุมมองและเปลี่ยนช่วงเวลา */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-bold text-ink sm:text-xl">
-            {viewMode === 'week'
-              ? `สัปดาห์นี้ (${currentWeekDays[0].dayNum} – ${currentWeekDays[6].dayNum} ${formatMonthYearThai(currentDate)})`
-              : formatMonthYearThai(currentDate)}
-          </h2>
-          <Button variant="outline" size="sm" onClick={handleToday}>
-            กลับไปวันนี้
-          </Button>
-        </div>
+      {/* แผงควบคุมปฏิทินขนาดใหญ่ ชัดเจน อ่านง่าย */}
+      <Card padding="md" className="border-line shadow-xs">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          {/* ซ้าย: ปุ่มสลับช่วงเวลา + ชื่อช่วงวันที่ตัวโต */}
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handlePrev}
+                title="ย้อนกลับ"
+                className="flex min-h-[42px] min-w-[42px] items-center justify-center rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm font-bold text-ink shadow-2xs transition hover:bg-surface-hover"
+              >
+                ◀
+              </button>
+              <button
+                type="button"
+                onClick={handleToday}
+                className="flex min-h-[42px] items-center gap-1.5 rounded-xl border border-primary/40 bg-primary-soft px-3.5 py-2 text-xs sm:text-sm font-bold text-primary shadow-2xs transition hover:bg-primary hover:text-ink-inverted"
+              >
+                <span>⚡</span>
+                <span>กลับไปวันนี้</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleNext}
+                title="ถัดไป"
+                className="flex min-h-[42px] min-w-[42px] items-center justify-center rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm font-bold text-ink shadow-2xs transition hover:bg-surface-hover"
+              >
+                ▶
+              </button>
+            </div>
 
-        {/* ปุ่มสลับโหมด: สัปดาห์ / เดือน / กำหนดการ */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-xl border border-line bg-surface-alt p-1">
-            <button
-              type="button"
-              onClick={() => setViewMode('week')}
-              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                viewMode === 'week'
-                  ? 'bg-primary text-ink-inverted shadow-2xs'
-                  : 'text-ink-secondary hover:text-ink'
-              }`}
-            >
-              📅 สัปดาห์นี้
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('month')}
-              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                viewMode === 'month'
-                  ? 'bg-primary text-ink-inverted shadow-2xs'
-                  : 'text-ink-secondary hover:text-ink'
-              }`}
-            >
-              🗓️ ทั้งเดือน
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('agenda')}
-              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                viewMode === 'agenda'
-                  ? 'bg-primary text-ink-inverted shadow-2xs'
-                  : 'text-ink-secondary hover:text-ink'
-              }`}
-            >
-              📋 กำหนดการ
-            </button>
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">
+                {viewMode === 'week'
+                  ? 'ช่วงสัปดาห์ที่กำลังดู'
+                  : viewMode === 'month'
+                    ? 'เดือนที่กำลังดู'
+                    : 'กำหนดการ'}
+              </span>
+              <h2 className="text-lg font-extrabold text-ink sm:text-2xl">
+                {viewMode === 'week'
+                  ? `สัปดาห์นี้ (${currentWeekDays[0].dayNum} – ${currentWeekDays[6].dayNum} ${formatMonthYearThai(currentDate)})`
+                  : formatMonthYearThai(currentDate)}
+              </h2>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <Button variant="secondary" size="sm" onClick={handlePrev}>
-              ◀ ก่อนหน้า
-            </Button>
-            <Button variant="secondary" size="sm" onClick={handleNext}>
-              ถัดไป ▶
-            </Button>
+          {/* ขวา: สลับมุมมอง 3 แบบ ปุ่มใหญ่ ตัวโต กดง่าย */}
+          <div className="flex items-center gap-2">
+            <span className="hidden sm:inline text-xs font-semibold text-ink-muted">มุมมอง:</span>
+            <div className="inline-flex rounded-2xl border border-line-strong bg-surface-alt p-1.5 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setViewMode('week')}
+                className={`flex min-h-[38px] items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition-all ${
+                  viewMode === 'week'
+                    ? 'bg-primary text-ink-inverted shadow-xs'
+                    : 'text-ink-secondary hover:text-ink hover:bg-surface/60'
+                }`}
+              >
+                <span>📅</span>
+                <span>สัปดาห์นี้</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('month')}
+                className={`flex min-h-[38px] items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition-all ${
+                  viewMode === 'month'
+                    ? 'bg-primary text-ink-inverted shadow-xs'
+                    : 'text-ink-secondary hover:text-ink hover:bg-surface/60'
+                }`}
+              >
+                <span>🗓️</span>
+                <span>ทั้งเดือน</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('agenda')}
+                className={`flex min-h-[38px] items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition-all ${
+                  viewMode === 'agenda'
+                    ? 'bg-primary text-ink-inverted shadow-xs'
+                    : 'text-ink-secondary hover:text-ink hover:bg-surface/60'
+                }`}
+              >
+                <span>📋</span>
+                <span>กำหนดการ</span>
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* เนื้อหาปฏิทินตามมุมมองที่เลือก */}
       {loading ? (
@@ -621,11 +654,11 @@ export function CalendarPage() {
               >
                 {/* หัวแถบวัน */}
                 <div className="flex items-center justify-between border-b border-line pb-2.5">
-                  <div>
-                    <span className="text-xs font-bold text-ink">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-xs font-bold text-ink-secondary">
                       วัน{dayMeta.label}
                     </span>
-                    <span className="ml-1.5 font-mono text-sm font-extrabold text-ink">
+                    <span className="font-mono text-base sm:text-lg font-extrabold text-ink">
                       {day.dayNum}
                     </span>
                   </div>
@@ -633,7 +666,7 @@ export function CalendarPage() {
                     <Badge tone="primary">วันนี้</Badge>
                   ) : (
                     <span className="text-[11px] font-semibold text-ink-muted">
-                      {dayEvents.length} รายการ
+                      {dayEvents.length > 0 ? `${dayEvents.length} รายการ` : 'ว่าง'}
                     </span>
                   )}
                 </div>
@@ -641,8 +674,8 @@ export function CalendarPage() {
                 {/* รายการกิจกรรมในวันนั้นแบบการ์ดอ่านง่าย */}
                 <div className="mt-3 flex-1 space-y-2">
                   {dayEvents.length === 0 ? (
-                    <div className="py-6 text-center text-xs text-ink-muted">
-                      <span>ว่าง • ไม่มีกิจกรรม</span>
+                    <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-line bg-surface-alt/40 text-center text-xs text-ink-muted">
+                      <span>ไม่มีกิจกรรม</span>
                     </div>
                   ) : (
                     dayEvents.map((ev) => {
@@ -657,21 +690,21 @@ export function CalendarPage() {
                               setSelectedUnifiedEvent(ev)
                             }
                           }}
-                          className={`cursor-pointer rounded-xl border p-2.5 text-xs transition shadow-2xs ${theme.bg} ${theme.border}`}
+                          className={`cursor-pointer rounded-xl border p-3 text-xs transition hover:scale-[1.01] hover:shadow-xs ${theme.bg} ${theme.border}`}
                         >
                           <div className="flex items-center justify-between gap-1">
-                            <span className="font-mono text-[11px] font-bold text-ink">
+                            <span className="font-mono text-xs font-extrabold text-ink">
                               {ev.timeLabel}
                             </span>
                             <Badge tone={theme.badgeTone}>
                               {theme.icon} {theme.badgeText}
                             </Badge>
                           </div>
-                          <p className="mt-1 font-bold text-ink line-clamp-2 leading-snug">
+                          <p className="mt-1.5 text-xs sm:text-[13px] font-bold text-ink line-clamp-2 leading-snug">
                             {ev.title}
                           </p>
                           {ev.location && (
-                            <p className="mt-0.5 text-[10px] text-ink-muted">
+                            <p className="mt-1 text-[11px] text-ink-muted">
                               📍 {ev.location}
                             </p>
                           )}

@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { useState, useRef, useEffect, type ReactNode } from 'react'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { getRoleLabelThai, useAuth } from '../lib/auth'
 import { THEME_META, useTheme, type ThemeMode } from '../lib/theme'
 import PixelCat from './PixelCat'
@@ -51,7 +51,7 @@ function getRoleTone(role: string): BadgeTone {
   return 'warning'
 }
 
-const ALL_NAV_ITEMS: NavItem[] = [
+const PRIMARY_NAV_ITEMS: NavItem[] = [
   {
     path: '/today',
     label: 'วันนี้',
@@ -102,6 +102,9 @@ const ALL_NAV_ITEMS: NavItem[] = [
       </svg>
     ),
   },
+]
+
+const MORE_NAV_ITEMS: NavItem[] = [
   {
     path: '/chat',
     label: 'แชทกลุ่ม',
@@ -140,6 +143,8 @@ const ALL_NAV_ITEMS: NavItem[] = [
   },
 ]
 
+const ALL_NAV_ITEMS: NavItem[] = [...PRIMARY_NAV_ITEMS, ...MORE_NAV_ITEMS]
+
 const MOBILE_BOTTOM_ITEMS = ALL_NAV_ITEMS.filter((item) => item.mobileBottom)
 
 export interface AppShellProps {
@@ -157,7 +162,25 @@ export function AppShell({
 }: AppShellProps) {
   const { user, displayName, currentRole, activeGroup, signOut } = useAuth()
   const { theme, cycleTheme } = useTheme()
+  const location = useLocation()
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const moreMenuRef = useRef<HTMLDivElement | null>(null)
 
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setMoreMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  useEffect(() => {
+    setMoreMenuOpen(false)
+  }, [location.pathname])
+
+  const isMoreActive = MORE_NAV_ITEMS.some((item) => location.pathname === item.path)
   const isViewer = currentRole === 'viewer'
   const isDarkOrOled = theme === 'dark' || theme === 'oled'
 
@@ -203,9 +226,9 @@ export function AppShell({
           {/* แถบเมนูบนสำหรับคอมพิวเตอร์ (>1024px) */}
           <nav
             aria-label="เมนูหลักคอมพิวเตอร์"
-            className="hidden lg:flex items-center gap-1 overflow-x-auto py-1"
+            className="hidden lg:flex items-center gap-1 shrink-0"
           >
-            {ALL_NAV_ITEMS.map((item) => (
+            {PRIMARY_NAV_ITEMS.map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}
@@ -221,6 +244,45 @@ export function AppShell({
                 <span className="whitespace-nowrap">{item.label}</span>
               </NavLink>
             ))}
+
+            {/* ดรอปดาวน์สำหรับเมนูเพิ่มเติม (แชทกลุ่ม, ตารางชีวิต, จัดการกลุ่ม) */}
+            <div ref={moreMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setMoreMenuOpen((prev) => !prev)}
+                className={`flex min-h-[38px] shrink-0 whitespace-nowrap items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold transition-all ${
+                  isMoreActive
+                    ? 'bg-primary text-ink-inverted shadow-2xs'
+                    : 'text-ink-secondary hover:bg-surface-hover hover:text-ink'
+                }`}
+              >
+                <span>เพิ่มเติม</span>
+                <span className="text-[10px] transition-transform duration-200">
+                  {moreMenuOpen ? '▴' : '▾'}
+                </span>
+              </button>
+
+              {moreMenuOpen && (
+                <div className="absolute right-0 top-full mt-1.5 w-44 rounded-2xl border border-line bg-surface p-1.5 shadow-lg z-50 animate-in fade-in zoom-in-95 duration-100">
+                  {MORE_NAV_ITEMS.map((item) => (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      className={({ isActive }) =>
+                        `flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                          isActive
+                            ? 'bg-primary text-ink-inverted'
+                            : 'text-ink hover:bg-surface-hover'
+                        }`
+                      }
+                    >
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </div>
           </nav>
 
           {/* ปุ่มสลับธีม + ป้ายบอกสิทธิ์ + ปุ่มล็อกอิน/ออกจากระบบ */}
