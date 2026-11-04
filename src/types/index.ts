@@ -16,6 +16,8 @@ export interface GroupInfo {
   description: string
   created_by: string
   created_at: string
+  source_course_code?: string | null
+  color?: string | null
 }
 
 export interface GroupMemberWithProfile {

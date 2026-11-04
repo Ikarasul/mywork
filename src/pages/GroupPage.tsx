@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { IconBookOpen, IconCheck, IconPencil, IconX } from '../components/icons'
 import { Badge, Button, Card, Toast } from '../components/ui'
 import {
   formatSupabaseErrorThai,
@@ -12,8 +13,36 @@ import {
   sha256Hex,
 } from '../lib/crypto'
 import { formatDateTimeThai, formatShortDateThai } from '../lib/dateThai'
+import {
+  COURSE_COLOR_PALETTE,
+  DEFAULT_SAMPLE_SCHEDULE,
+  DEFAULT_SEMESTER,
+  buildCourseColorMap,
+  getCourseColorTheme,
+  localStore,
+  saveCourseDetails,
+  storage,
+} from '../lib/storage'
 import { supabase } from '../lib/supabase'
-import type { GroupRole, InviteCodeItem, ShareLinkItem } from '../types'
+import type {
+  CourseColorId,
+  CourseScheduleItem,
+  GroupRole,
+  InviteCodeItem,
+  ShareLinkItem,
+} from '../types'
+
+interface CourseOption {
+  course_code: string
+  course_name: string
+  color: CourseColorId
+  credits: number
+  section: string
+  instructor: string
+  locationText: string
+  scheduleTimes: string[]
+  items: CourseScheduleItem[]
+}
 
 export function GroupPage() {
   const {
@@ -27,9 +56,24 @@ export function GroupPage() {
   } = useAuth()
 
   // ฟอร์มสร้างกลุ่มใหม่
+  const [createMode, setCreateMode] = useState<'custom' | 'from_course'>('custom')
   const [groupName, setGroupName] = useState('')
   const [groupDesc, setGroupDesc] = useState('')
+  const [groupColor, setGroupColor] = useState<CourseColorId>('indigo')
+  const [selectedCourseCode, setSelectedCourseCode] = useState<string | null>(null)
+  const [copyCourseSessions, setCopyCourseSessions] = useState(true)
+  const [courseSearch, setCourseSearch] = useState('')
+  const [courseOptions, setCourseOptions] = useState<CourseOption[]>([])
+  const [loadingCourses, setLoadingCourses] = useState(false)
   const [creatingGroup, setCreatingGroup] = useState(false)
+
+  // โมดอลแก้ไขข้อมูลกลุ่ม (เจ้าของ/ผู้ดูแล)
+  const [isEditingGroupModalOpen, setIsEditingGroupModalOpen] = useState(false)
+  const [editGroupName, setEditGroupName] = useState('')
+  const [editGroupDesc, setEditGroupDesc] = useState('')
+  const [editGroupColor, setEditGroupColor] = useState<CourseColorId>('indigo')
+  const [editGroupCourseCode, setEditGroupCourseCode] = useState('')
+  const [savingGroupEdit, setSavingGroupEdit] = useState(false)
 
   // ฟอร์มกรอกรหัสเชิญ
   const [inviteInput, setInviteInput] = useState('')
@@ -53,6 +97,97 @@ export function GroupPage() {
 
   const isOwner = currentRole === 'owner'
   const isOwnerOrAdmin = currentRole === 'owner' || currentRole === 'admin'
+
+  // โหลดรายวิชาสำหรับโหมด "เลือกจากรายวิชา"
+  useEffect(() => {
+    let isMounted = true
+    async function loadCoursesForGroup() {
+      setLoadingCourses(true)
+      try {
+        const activeId = activeGroup?.id
+        const key = activeId
+          ? `class_sessions:${activeId}:${DEFAULT_SEMESTER}`
+          : 'class_sessions'
+
+        const [dbItems, localItems] = await Promise.all([
+          storage.get<CourseScheduleItem[]>(key).catch(() => null),
+          localStore.get<CourseScheduleItem[]>('class_sessions').catch(() => null),
+        ])
+
+        const rawItems =
+          dbItems && dbItems.length > 0
+            ? dbItems
+            : localItems && localItems.length > 0
+              ? localItems
+              : DEFAULT_SAMPLE_SCHEDULE
+
+        const colorMap = buildCourseColorMap(rawItems)
+        const map = new Map<string, CourseOption>()
+
+        for (const item of rawItems) {
+          const code = (item.course_code || '').trim().toUpperCase()
+          if (!code) continue
+
+          const theme = colorMap.get(code)
+          const themeId = (item.color as CourseColorId) || theme?.id || 'indigo'
+          const existing = map.get(code)
+          const sessionTime = `${item.day} ${item.start}–${item.end}${item.room ? ` (${item.room})` : ''}`
+
+          if (!existing) {
+            map.set(code, {
+              course_code: code,
+              course_name: item.course_name,
+              color: themeId,
+              credits: item.credits ?? 3,
+              section: item.section || '001',
+              instructor: item.instructor || '',
+              locationText: item.location_text || item.room || '',
+              scheduleTimes: [sessionTime],
+              items: [item],
+            })
+          } else {
+            existing.scheduleTimes.push(sessionTime)
+            existing.items.push(item)
+          }
+        }
+
+        if (isMounted) {
+          setCourseOptions(Array.from(map.values()))
+        }
+      } catch (err) {
+        console.error('Failed to load courses for group:', err)
+      } finally {
+        if (isMounted) setLoadingCourses(false)
+      }
+    }
+
+    void loadCoursesForGroup()
+    return () => {
+      isMounted = false
+    }
+  }, [activeGroup?.id])
+
+  const filteredCourses = useMemo(() => {
+    const q = courseSearch.trim().toLowerCase()
+    if (!q) return courseOptions
+    return courseOptions.filter(
+      (c) =>
+        c.course_code.toLowerCase().includes(q) ||
+        c.course_name.toLowerCase().includes(q) ||
+        c.instructor.toLowerCase().includes(q),
+    )
+  }, [courseOptions, courseSearch])
+
+  function handleSelectCourse(course: CourseOption) {
+    setSelectedCourseCode(course.course_code)
+    setGroupName(`${course.course_code} ${course.course_name}`)
+    setGroupColor(course.color)
+    if (course.instructor) {
+      setGroupDesc(`วิชา ${course.course_name} อาจารย์ผู้สอน: ${course.instructor}`)
+    } else {
+      setGroupDesc(`กลุ่มเรียนวิชา ${course.course_name}`)
+    }
+  }
 
   const loadAdminResources = useCallback(async () => {
     if (!supabase || !user || !activeGroup || !isOwnerOrAdmin) {
@@ -97,29 +232,164 @@ export function GroupPage() {
     setStatusMessage(null)
 
     try {
-      const { data, error } = await supabase
-        .from('groups')
-        .insert({
-          name: trimmedName,
-          description: groupDesc.trim(),
-          created_by: user.id,
-        })
-        .select('*')
-        .single()
+      let newGroupId: string | null = null
+      const courseCodeToSave = createMode === 'from_course' ? selectedCourseCode : null
+      const colorToSave = groupColor || 'indigo'
 
-      if (error) throw error
+      // 1. ลองบันทึกแบบมี source_course_code และ color
+      try {
+        const { data, error } = await supabase
+          .from('groups')
+          .insert({
+            name: trimmedName,
+            description: groupDesc.trim(),
+            created_by: user.id,
+            source_course_code: courseCodeToSave,
+            color: colorToSave,
+          })
+          .select('*')
+          .single()
+
+        if (error) throw error
+        newGroupId = data?.id as string
+      } catch {
+        // หากยังไม่ได้รัน migration-group-course.sql (คอลัมน์ยังไม่มี)
+        // ให้ fallback บันทึกเฉพาะฟิลด์เดิม name, description, created_by
+        const { data: fallbackData, error: fallbackErr } = await supabase
+          .from('groups')
+          .insert({
+            name: trimmedName,
+            description: groupDesc.trim(),
+            created_by: user.id,
+          })
+          .select('*')
+          .single()
+
+        if (fallbackErr) throw fallbackErr
+        newGroupId = fallbackData?.id as string
+
+        // บันทึก metadata ลง localStorage สำรองไว้
+        if (newGroupId) {
+          try {
+            window.localStorage.setItem(
+              `lsp:group_meta:${newGroupId}`,
+              JSON.stringify({ source_course_code: courseCodeToSave, color: colorToSave }),
+            )
+          } catch {}
+        }
+      }
+
+      // 2. หากเลือกจากรายวิชา และติ๊กให้คัดลอกคาบเรียนไปไว้ในกลุ่มใหม่
+      if (
+        newGroupId &&
+        createMode === 'from_course' &&
+        copyCourseSessions &&
+        selectedCourseCode
+      ) {
+        const selectedCourse = courseOptions.find((c) => c.course_code === selectedCourseCode)
+        if (selectedCourse && selectedCourse.items.length > 0) {
+          try {
+            const targetStorageKey = `class_sessions:${newGroupId}:${DEFAULT_SEMESTER}`
+            const itemsToCopy: CourseScheduleItem[] = selectedCourse.items.map((item) => ({
+              ...item,
+              group_id: newGroupId!,
+              color: colorToSave,
+            }))
+
+            await storage.set(targetStorageKey, itemsToCopy)
+
+            await saveCourseDetails({
+              storageKey: targetStorageKey,
+              courseCode: selectedCourse.course_code,
+              color: colorToSave,
+              notes: selectedCourse.items[0]?.notes || '',
+              locationText: selectedCourse.locationText || '',
+              links: selectedCourse.items[0]?.links || [],
+              currentSessions: itemsToCopy,
+            })
+          } catch (copyErr) {
+            console.warn('Could not copy course sessions to new group:', copyErr)
+          }
+        }
+      }
 
       setGroupName('')
       setGroupDesc('')
-      if (data?.id) {
-        setActiveGroupId(data.id as string)
+      setSelectedCourseCode(null)
+      if (newGroupId) {
+        setActiveGroupId(newGroupId)
       }
       await refreshGroupContext()
-      setStatusMessage(`สร้างกลุ่ม "${trimmedName}" สำเร็จ! คุณเป็นเจ้าของกลุ่ม (Owner)`)
+      setStatusMessage(`สร้างกลุ่ม "${trimmedName}" สำเร็จเรียบร้อย! คุณเป็นเจ้าของกลุ่ม (Owner)`)
     } catch (err) {
       setErrorMessage(formatSupabaseErrorThai(err))
     } finally {
       setCreatingGroup(false)
+    }
+  }
+
+  function handleOpenEditGroup() {
+    if (!activeGroup) return
+    setEditGroupName(activeGroup.name)
+    setEditGroupDesc(activeGroup.description || '')
+    setEditGroupColor((activeGroup.color as CourseColorId) || 'indigo')
+    setEditGroupCourseCode(activeGroup.source_course_code || '')
+    setIsEditingGroupModalOpen(true)
+  }
+
+  async function handleSaveGroupEdit(e: FormEvent) {
+    e.preventDefault()
+    if (!supabase || !activeGroup) return
+    const trimmed = editGroupName.trim()
+    if (!trimmed) return
+
+    setSavingGroupEdit(true)
+    setErrorMessage(null)
+    setStatusMessage(null)
+
+    try {
+      try {
+        const { error } = await supabase
+          .from('groups')
+          .update({
+            name: trimmed,
+            description: editGroupDesc.trim(),
+            color: editGroupColor,
+            source_course_code: editGroupCourseCode.trim() || null,
+          })
+          .eq('id', activeGroup.id)
+
+        if (error) throw error
+      } catch {
+        // Fallback if columns don't exist yet
+        const { error } = await supabase
+          .from('groups')
+          .update({
+            name: trimmed,
+            description: editGroupDesc.trim(),
+          })
+          .eq('id', activeGroup.id)
+
+        if (error) throw error
+
+        try {
+          window.localStorage.setItem(
+            `lsp:group_meta:${activeGroup.id}`,
+            JSON.stringify({
+              source_course_code: editGroupCourseCode.trim() || null,
+              color: editGroupColor,
+            }),
+          )
+        } catch {}
+      }
+
+      await refreshGroupContext()
+      setIsEditingGroupModalOpen(false)
+      setStatusMessage(`บันทึกข้อมูลกลุ่ม "${trimmed}" เรียบร้อยแล้ว`)
+    } catch (err) {
+      setErrorMessage(formatSupabaseErrorThai(err))
+    } finally {
+      setSavingGroupEdit(false)
     }
   }
 
@@ -345,23 +615,62 @@ export function GroupPage() {
           />
         </div>
 
-        {groups.length > 0 && (
-          <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-edge pt-4">
-            <label htmlFor="select-active-group" className="text-sm font-medium text-ink">
-              กลุ่มที่เลือกใช้งาน:
-            </label>
-            <select
-              id="select-active-group"
-              value={activeGroup?.id ?? ''}
-              onChange={(e) => setActiveGroupId(e.target.value)}
-              className="min-h-[44px] rounded-xl border border-edge bg-surface-muted px-3 py-1.5 text-sm font-medium text-ink"
-            >
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
+        {groups.length > 0 && activeGroup && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-4 border-t border-line pt-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <label htmlFor="select-active-group" className="text-sm font-semibold text-ink">
+                กลุ่มที่เลือกใช้งาน:
+              </label>
+              <select
+                id="select-active-group"
+                value={activeGroup.id}
+                onChange={(e) => setActiveGroupId(e.target.value)}
+                className="min-h-[44px] rounded-xl border border-line bg-surface-alt px-3 py-1.5 text-sm font-medium text-ink focus:border-primary focus:outline-none"
+              >
+                {groups.map((g) => {
+                  const tag = g.source_course_code ? `[${g.source_course_code}] ` : ''
+                  return (
+                    <option key={g.id} value={g.id}>
+                      {tag}{g.name}
+                    </option>
+                  )
+                })}
+              </select>
+            </div>
+
+            {/* ข้อมูลกลุ่มที่เลือกใช้งาน & ปุ่มแก้ไขข้อมูลกลุ่ม */}
+            <div className="flex flex-wrap items-center gap-2">
+              {activeGroup.source_course_code && (
+                <Badge tone="sky" className="inline-flex items-center gap-1">
+                  <IconBookOpen className="h-3 w-3" />
+                  <span>วิชา {activeGroup.source_course_code}</span>
+                </Badge>
+              )}
+              {activeGroup.color && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-alt px-2.5 py-1 text-xs font-semibold">
+                  <span
+                    className={`h-2.5 w-2.5 rounded-full ${
+                      getCourseColorTheme((activeGroup.color as CourseColorId) || 'indigo')?.swatchBg || 'bg-primary'
+                    }`}
+                  />
+                  <span className="text-xs text-ink-secondary">
+                    {getCourseColorTheme((activeGroup.color as CourseColorId) || 'indigo')?.label || 'ม่วงคราม'}
+                  </span>
+                </span>
+              )}
+              {isOwnerOrAdmin && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenEditGroup}
+                  className="inline-flex items-center gap-1.5"
+                >
+                  <IconPencil className="h-3.5 w-3.5 text-primary" />
+                  <span>แก้ไขข้อมูลกลุ่ม</span>
+                </Button>
+              )}
+            </div>
           </div>
         )}
       </Card>
@@ -380,7 +689,7 @@ export function GroupPage() {
               value={inviteInput}
               onChange={(e) => setInviteInput(e.target.value.toUpperCase())}
               placeholder="เช่น ABCD-1234-EFGH"
-              className="min-h-[44px] w-full rounded-xl border border-edge bg-surface-muted px-3 py-2 font-mono text-sm uppercase text-ink focus:border-primary focus:outline-none"
+              className="min-h-[44px] w-full rounded-xl border border-line bg-surface-alt px-3 py-2 font-mono text-sm uppercase text-ink focus:border-primary focus:outline-none"
             />
             <Button type="submit" disabled={redeeming} className="w-full">
               {redeeming ? 'กำลังตรวจสอบรหัสเชิญ...' : 'ยืนยันรหัสเชิญ'}
@@ -389,28 +698,222 @@ export function GroupPage() {
         </Card>
 
         {/* สร้างกลุ่มใหม่ */}
-        <Card>
-          <h2 className="text-lg font-bold text-ink">สร้างกลุ่มใหม่</h2>
-          <p className="mt-1 text-xs text-ink-muted">
-            เมื่อสร้างกลุ่มใหม่ คุณจะได้รับสิทธิ์เป็นเจ้าของกลุ่ม (Owner) โดยอัตโนมัติ
-          </p>
-          <form onSubmit={(e) => void handleCreateGroup(e)} className="mt-4 space-y-3">
-            <input
-              type="text"
-              required
-              value={groupName}
-              onChange={(e) => setGroupName(e.target.value)}
-              placeholder="ชื่อกลุ่มเรียน เช่น กลุ่มบริหารธุรกิจ ปี 4"
-              className="min-h-[44px] w-full rounded-xl border border-edge bg-surface-muted px-3 py-2 text-sm text-ink focus:border-primary focus:outline-none"
-            />
-            <input
-              type="text"
-              value={groupDesc}
-              onChange={(e) => setGroupDesc(e.target.value)}
-              placeholder="คำอธิบายกลุ่ม (ไม่บังคับ)"
-              className="min-h-[44px] w-full rounded-xl border border-edge bg-surface-muted px-3 py-2 text-sm text-ink focus:border-primary focus:outline-none"
-            />
-            <Button type="submit" disabled={creatingGroup} className="w-full">
+        <Card className="md:col-span-2">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
+            <div>
+              <h2 className="text-lg font-bold text-ink">สร้างกลุ่มใหม่</h2>
+              <p className="mt-0.5 text-xs text-ink-muted">
+                เลือกตั้งชื่อเอง หรือเลือกจากรายวิชาในตารางเรียนเพื่อเติมข้อมูลและคัดลอกคาบเรียนอัตโนมัติ
+              </p>
+            </div>
+            {/* สลับโหมดตั้งชื่อเอง / เลือกจากรายวิชา */}
+            <div className="inline-flex rounded-xl border border-line bg-surface-alt p-1">
+              <button
+                type="button"
+                onClick={() => setCreateMode('custom')}
+                className={`min-h-[36px] rounded-lg px-3 py-1 text-xs font-semibold transition ${
+                  createMode === 'custom'
+                    ? 'bg-primary text-ink-inverted shadow-xs'
+                    : 'text-ink-secondary hover:text-ink'
+                }`}
+              >
+                ตั้งชื่อเอง
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreateMode('from_course')}
+                className={`min-h-[36px] rounded-lg px-3 py-1 text-xs font-semibold transition ${
+                  createMode === 'from_course'
+                    ? 'bg-primary text-ink-inverted shadow-xs'
+                    : 'text-ink-secondary hover:text-ink'
+                }`}
+              >
+                เลือกจากรายวิชา ({courseOptions.length})
+              </button>
+            </div>
+          </div>
+
+          <form onSubmit={(e) => void handleCreateGroup(e)} className="mt-4 space-y-4">
+            {createMode === 'from_course' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-ink">
+                    1. เลือกรหัสวิชาที่ต้องการใช้สร้างกลุ่ม:
+                  </span>
+                  {courseOptions.length > 4 && (
+                    <input
+                      type="text"
+                      value={courseSearch}
+                      onChange={(e) => setCourseSearch(e.target.value)}
+                      placeholder="ค้นหารหัส/ชื่อวิชา..."
+                      className="max-w-[200px] rounded-lg border border-line bg-surface-alt px-2.5 py-1 text-xs text-ink focus:border-primary focus:outline-none"
+                    />
+                  )}
+                </div>
+
+                {loadingCourses ? (
+                  <div className="py-6 text-center text-xs text-ink-muted">
+                    กำลังโหลดรายวิชาจากตารางเรียน...
+                  </div>
+                ) : filteredCourses.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-line p-4 text-center text-xs text-ink-muted">
+                    ไม่พบรายวิชาในตารางเรียน คุณสามารถไปเพิ่มวิชาที่หน้า{' '}
+                    <Link to="/schedule" className="font-bold text-primary underline">
+                      ตารางเรียน (/schedule)
+                    </Link>{' '}
+                    หรือเลือกโหมด "ตั้งชื่อเอง" ด้านบน
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                    {filteredCourses.map((c) => {
+                      const isSelected = selectedCourseCode === c.course_code
+                      const theme = getCourseColorTheme(c.color)
+                      return (
+                        <div
+                          key={`course-opt-${c.course_code}`}
+                          onClick={() => handleSelectCourse(c)}
+                          className={`group relative cursor-pointer rounded-xl border p-3 transition-all ${
+                            isSelected
+                              ? 'border-primary bg-primary-soft/25 ring-2 ring-primary/40'
+                              : 'border-line bg-surface-alt hover:border-line-strong hover:bg-surface'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-xs font-bold ${
+                                theme?.bar || 'bg-primary'
+                              } text-white`}
+                            >
+                              {c.course_code}
+                            </span>
+                            <div
+                              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${
+                                isSelected
+                                  ? 'border-primary bg-primary text-ink-inverted'
+                                  : 'border-line text-transparent group-hover:border-line-strong'
+                              }`}
+                            >
+                              <IconCheck className="h-3.5 w-3.5" />
+                            </div>
+                          </div>
+
+                          <div className="mt-1.5 font-semibold text-xs text-ink line-clamp-1">
+                            {c.course_name}
+                          </div>
+
+                          <div className="mt-1 space-y-0.5 text-[11px] text-ink-muted">
+                            <div className="line-clamp-1">
+                              {c.scheduleTimes.join(', ') || 'ไม่มีข้อมูลเวลาเรียน'}
+                            </div>
+                            {c.instructor && (
+                              <div className="line-clamp-1 text-ink-secondary">
+                                อาจารย์: {c.instructor}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {selectedCourseCode && (
+                  <div className="rounded-xl border border-line bg-surface-alt/70 p-3">
+                    <label className="flex cursor-pointer items-start gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={copyCourseSessions}
+                        onChange={(e) => setCopyCourseSessions(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-line text-primary focus:ring-primary"
+                      />
+                      <div className="text-xs">
+                        <span className="font-bold text-ink">
+                          คัดลอกวิชาและคาบเรียนนี้ไปไว้ในกลุ่มใหม่โดยอัตโนมัติ
+                        </span>
+                        <p className="mt-0.5 text-ink-muted">
+                          สมาชิกที่เข้าร่วมกลุ่มนี้จะเห็นตารางเรียน ห้องเรียน และผู้สอนของวิชานี้ทันที
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-3 pt-2">
+              <div>
+                <div className="flex items-center justify-between pb-1">
+                  <label htmlFor="input-group-name" className="text-xs font-bold text-ink">
+                    ชื่อกลุ่ม: <span className="text-status-danger-fg">*</span>
+                  </label>
+                  <span
+                    className={`font-mono text-[11px] ${
+                      groupName.length > 70 ? 'text-status-warning-fg font-bold' : 'text-ink-muted'
+                    }`}
+                  >
+                    {groupName.length}/80
+                  </span>
+                </div>
+                <input
+                  id="input-group-name"
+                  type="text"
+                  required
+                  maxLength={80}
+                  value={groupName}
+                  onChange={(e) => setGroupName(e.target.value)}
+                  placeholder="เช่น MGT33267 การวิเคราะห์ธุรกิจ Sec 002"
+                  className="min-h-[44px] w-full rounded-xl border border-line bg-surface-alt px-3 py-2 text-sm text-ink focus:border-primary focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="input-group-desc" className="block pb-1 text-xs font-bold text-ink">
+                  คำอธิบายกลุ่ม (ไม่บังคับ):
+                </label>
+                <input
+                  id="input-group-desc"
+                  type="text"
+                  value={groupDesc}
+                  onChange={(e) => setGroupDesc(e.target.value)}
+                  placeholder="เช่น กลุ่มทำงานโปรเจกต์และแชร์โน้ตสรุป"
+                  className="min-h-[44px] w-full rounded-xl border border-line bg-surface-alt px-3 py-2 text-sm text-ink focus:border-primary focus:outline-none"
+                />
+              </div>
+
+              {/* ธีมสีประจำกลุ่ม */}
+              <div>
+                <label className="block pb-1.5 text-xs font-bold text-ink">
+                  ธีมสีประจำกลุ่ม:
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  {COURSE_COLOR_PALETTE.map((pal) => {
+                    const isSelected = groupColor === pal.id
+                    return (
+                      <button
+                        key={`pal-group-${pal.id}`}
+                        type="button"
+                        onClick={() => setGroupColor(pal.id)}
+                        className={`group flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-medium transition ${
+                          isSelected
+                            ? 'border-primary bg-primary-soft text-primary font-bold shadow-2xs'
+                            : 'border-line bg-surface-alt text-ink-secondary hover:text-ink hover:border-line-strong'
+                        }`}
+                      >
+                        <span className={`h-3 w-3 rounded-full ${pal.swatchBg}`} />
+                        <span>{pal.label}</span>
+                        {isSelected && <IconCheck className="h-3.5 w-3.5 ml-0.5 text-primary" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              disabled={creatingGroup || !groupName.trim()}
+              className="w-full sm:w-auto"
+            >
               {creatingGroup ? 'กำลังสร้างกลุ่ม...' : 'สร้างกลุ่มใหม่'}
             </Button>
           </form>
@@ -694,6 +1197,131 @@ export function GroupPage() {
             </div>
           )}
         </Card>
+      )}
+
+      {/* โมดอลแก้ไขข้อมูลกลุ่ม (เจ้าของกลุ่มและผู้ดูแล) */}
+      {isEditingGroupModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsEditingGroupModalOpen(false)
+          }}
+        >
+          <div className="w-full max-w-lg rounded-2xl border border-line bg-surface p-5 shadow-2xl sm:p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div className="flex items-center gap-2">
+                <IconPencil className="h-5 w-5 text-primary" />
+                <h3 className="text-lg font-bold text-ink">แก้ไขข้อมูลกลุ่ม</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditingGroupModalOpen(false)}
+                className="rounded-lg p-1.5 text-ink-muted hover:bg-surface-hover hover:text-ink"
+              >
+                <IconX className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={(e) => void handleSaveGroupEdit(e)} className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between pb-1">
+                  <label htmlFor="edit-group-name" className="text-xs font-bold text-ink">
+                    ชื่อกลุ่ม: <span className="text-status-danger-fg">*</span>
+                  </label>
+                  <span
+                    className={`font-mono text-[11px] ${
+                      editGroupName.length > 70 ? 'text-status-warning-fg font-bold' : 'text-ink-muted'
+                    }`}
+                  >
+                    {editGroupName.length}/80
+                  </span>
+                </div>
+                <input
+                  id="edit-group-name"
+                  type="text"
+                  required
+                  maxLength={80}
+                  value={editGroupName}
+                  onChange={(e) => setEditGroupName(e.target.value)}
+                  className="min-h-[44px] w-full rounded-xl border border-line bg-surface-alt px-3 py-2 text-sm text-ink focus:border-primary focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="edit-group-desc" className="block pb-1 text-xs font-bold text-ink">
+                  คำอธิบายกลุ่ม:
+                </label>
+                <input
+                  id="edit-group-desc"
+                  type="text"
+                  value={editGroupDesc}
+                  onChange={(e) => setEditGroupDesc(e.target.value)}
+                  placeholder="เช่น กลุ่มทำงานโปรเจกต์และแชร์โน้ตสรุป"
+                  className="min-h-[44px] w-full rounded-xl border border-line bg-surface-alt px-3 py-2 text-sm text-ink focus:border-primary focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="edit-group-course-code"
+                  className="block pb-1 text-xs font-bold text-ink"
+                >
+                  รหัสวิชาประจำกลุ่ม (ไม่บังคับ):
+                </label>
+                <input
+                  id="edit-group-course-code"
+                  type="text"
+                  value={editGroupCourseCode}
+                  onChange={(e) => setEditGroupCourseCode(e.target.value.toUpperCase())}
+                  placeholder="เช่น MGT33267"
+                  className="min-h-[44px] w-full rounded-xl border border-line bg-surface-alt px-3 py-2 font-mono text-sm uppercase text-ink focus:border-primary focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block pb-1.5 text-xs font-bold text-ink">
+                  ธีมสีประจำกลุ่ม:
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  {COURSE_COLOR_PALETTE.map((pal) => {
+                    const isSelected = editGroupColor === pal.id
+                    return (
+                      <button
+                        key={`edit-pal-${pal.id}`}
+                        type="button"
+                        onClick={() => setEditGroupColor(pal.id)}
+                        className={`group flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-medium transition ${
+                          isSelected
+                            ? 'border-primary bg-primary-soft text-primary font-bold shadow-2xs'
+                            : 'border-line bg-surface-alt text-ink-secondary hover:text-ink hover:border-line-strong'
+                        }`}
+                      >
+                        <span className={`h-3 w-3 rounded-full ${pal.swatchBg}`} />
+                        <span>{pal.label}</span>
+                        {isSelected && <IconCheck className="h-3.5 w-3.5 ml-0.5 text-primary" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-line pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditingGroupModalOpen(false)}
+                >
+                  ยกเลิก
+                </Button>
+                <Button type="submit" disabled={savingGroupEdit || !editGroupName.trim()}>
+                  {savingGroupEdit ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   )

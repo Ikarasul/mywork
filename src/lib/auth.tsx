@@ -154,7 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // ดึงรายชื่อกลุ่มทั้งหมด
       const { data: groupsData } = await supabase
         .from('groups')
-        .select('id, name, description, created_by, created_at')
+        .select('*')
         .order('created_at', { ascending: true })
 
       let groupList = (groupsData ?? []) as GroupInfo[]
@@ -171,7 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             description: 'กลุ่มหลักสำหรับจัดการตารางเรียนและงาน',
             created_by: user.id,
           })
-          .select('id, name, description, created_by, created_at')
+          .select('*')
           .single()
 
         if (createdGroup) {
