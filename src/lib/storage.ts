@@ -1549,7 +1549,11 @@ export async function saveCourseDetails(params: {
 
         if (updErr) {
           const errMsg = String((updErr as { message?: string }).message ?? updErr)
-          if (errMsg.includes('column') && errMsg.includes('does not exist')) {
+          const isMissingColumn =
+            (errMsg.includes('column') && errMsg.includes('does not exist')) ||
+            errMsg.includes('schema cache') ||
+            errMsg.includes('Could not find')
+          if (isMissingColumn) {
             // กรณีฐานข้อมูลยังไม่ได้รัน migration-course-details.sql ให้ทดสอบสิทธิ์ด้วยการอัปเดต online_link
             const { data: testRows, error: testErr } = await supabase
               .from('courses')
