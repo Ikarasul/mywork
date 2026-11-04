@@ -22,9 +22,21 @@ import {
 } from '../components/ui'
 import { formatSupabaseErrorThai, useAuth } from '../lib/auth'
 import { formatDateTimeThai, getRelativeCountdownThai } from '../lib/dateThai'
-import { formatStorageErrorThai, localStore, storage } from '../lib/storage'
+import {
+  DEFAULT_SAMPLE_SCHEDULE,
+  DEFAULT_SEMESTER,
+  formatStorageErrorThai,
+  localStore,
+  storage,
+} from '../lib/storage'
 import { supabase } from '../lib/supabase'
-import type { TaskItem, TaskStatus, TaskType } from '../types'
+import type { CourseScheduleItem, TaskItem, TaskStatus, TaskType } from '../types'
+
+interface AvailableCourse {
+  code: string
+  name: string
+  room?: string
+}
 
 const TASK_TYPE_META: Record<
   TaskType,
@@ -94,6 +106,56 @@ export function TasksPage() {
   const [examRoom, setExamRoom] = useState('')
   const [examTopics, setExamTopics] = useState('')
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([])
+  const [availableCourses, setAvailableCourses] = useState<AvailableCourse[]>([])
+  const [isCustomCourseInput, setIsCustomCourseInput] = useState(false)
+
+  // โหลดรายวิชาที่มีอยู่ในกลุ่ม/ตารางเรียน เพื่อให้เลือกได้ง่ายไม่ต้องพิมพ์เอง
+  useEffect(() => {
+    let isMounted = true
+    async function loadAvailableCourses() {
+      try {
+        const scheduleKey = activeGroup
+          ? `class_sessions:${activeGroup.id}:${DEFAULT_SEMESTER}`
+          : 'class_sessions'
+
+        const [dbItems, localItems] = await Promise.all([
+          storage.get<CourseScheduleItem[]>(scheduleKey).catch(() => null),
+          localStore.get<CourseScheduleItem[]>('class_sessions').catch(() => null),
+        ])
+
+        const rawItems =
+          dbItems && dbItems.length > 0
+            ? dbItems
+            : localItems && localItems.length > 0
+              ? localItems
+              : DEFAULT_SAMPLE_SCHEDULE
+
+        const map = new Map<string, AvailableCourse>()
+        for (const item of rawItems) {
+          const code = (item.course_code || '').trim().toUpperCase()
+          if (!code) continue
+          if (!map.has(code)) {
+            map.set(code, {
+              code,
+              name: item.course_name || code,
+              room: item.room || item.location_text || '',
+            })
+          }
+        }
+
+        if (isMounted) {
+          setAvailableCourses(Array.from(map.values()))
+        }
+      } catch (err) {
+        console.error('Failed to load courses for tasks page:', err)
+      }
+    }
+
+    void loadAvailableCourses()
+    return () => {
+      isMounted = false
+    }
+  }, [activeGroup?.id])
 
   const isLoggedInViewer = Boolean(user && currentRole === 'viewer')
   const isOwnerOrAdmin = !user || currentRole === 'owner' || currentRole === 'admin'
@@ -435,16 +497,96 @@ export function TasksPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-ink-secondary">
-                  รหัสวิชา (ถ้ามี)
-                </label>
-                <input
-                  type="text"
-                  value={courseCode}
-                  onChange={(e) => setCourseCode(e.target.value)}
-                  placeholder="ICT35467"
-                  className="mt-1 min-h-[44px] sm:min-h-[38px] w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink uppercase"
-                />
+                <div className="flex items-center justify-between pb-1">
+                  <label htmlFor="task-course-code-field" className="block text-xs font-medium text-ink-secondary">
+                    รหัสวิชา (ถ้ามี)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomCourseInput((prev) => !prev)}
+                    className="cursor-pointer text-[11px] font-semibold text-primary hover:underline"
+                  >
+                    {isCustomCourseInput ? '📋 เลือกจากรายวิชา' : '✏️ พิมพ์รหัสเอง'}
+                  </button>
+                </div>
+
+                {!isCustomCourseInput ? (
+                  <select
+                    id="task-course-code-field"
+                    value={courseCode}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      if (val === '__custom__') {
+                        setIsCustomCourseInput(true)
+                      } else {
+                        setCourseCode(val)
+                        if (taskType === 'exam' && !examRoom.trim()) {
+                          const matched = availableCourses.find((c) => c.code === val)
+                          if (matched?.room) {
+                            setExamRoom(matched.room)
+                          }
+                        }
+                      }
+                    }}
+                    className="min-h-[44px] sm:min-h-[38px] w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink focus:border-primary focus:outline-none"
+                  >
+                    <option value="">-- ไม่ระบุวิชา --</option>
+                    {availableCourses.map((c) => (
+                      <option key={`opt-task-c-${c.code}`} value={c.code}>
+                        {c.code} - {c.name}
+                      </option>
+                    ))}
+                    <option value="__custom__">✏️ พิมพ์รหัสวิชาอื่นเอง...</option>
+                  </select>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      id="task-course-code-field"
+                      type="text"
+                      value={courseCode}
+                      onChange={(e) => setCourseCode(e.target.value.toUpperCase())}
+                      placeholder="เช่น ICT35467"
+                      className="min-h-[44px] sm:min-h-[38px] w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink uppercase focus:border-primary focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      title="สลับกลับไปเลือกจากรายวิชา"
+                      onClick={() => setIsCustomCourseInput(false)}
+                      className="shrink-0 min-h-[44px] sm:min-h-[38px] rounded-xl border border-line-strong bg-surface-alt px-2.5 text-xs font-semibold text-ink-secondary hover:bg-surface hover:text-ink"
+                    >
+                      เลือกวิชา
+                    </button>
+                  </div>
+                )}
+
+                {/* ปุ่มลัดเลือกวิชาด่วน 1 คลิก */}
+                {availableCourses.length > 0 && !isCustomCourseInput && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                    <span className="text-[10px] text-ink-muted">เลือกด่วน:</span>
+                    {availableCourses.map((c) => {
+                      const isSelected = courseCode === c.code
+                      return (
+                        <button
+                          key={`chip-task-${c.code}`}
+                          type="button"
+                          onClick={() => {
+                            setCourseCode(c.code)
+                            if (taskType === 'exam' && !examRoom.trim() && c.room) {
+                              setExamRoom(c.room)
+                            }
+                          }}
+                          className={`rounded-md px-1.5 py-0.5 font-mono text-[10px] font-bold transition ${
+                            isSelected
+                              ? 'bg-primary text-ink-inverted'
+                              : 'border border-line bg-surface-alt text-ink-secondary hover:border-primary hover:text-primary'
+                          }`}
+                        >
+                          {c.code}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
 
               <div className="sm:col-span-2">
