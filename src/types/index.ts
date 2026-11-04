@@ -123,6 +123,7 @@ export interface ClassRescheduleOverride {
   reason?: string
   created_by?: string | null
   created_at?: string
+  gcal_event_id?: string | null
 }
 
 export interface RoutineItem {
@@ -155,6 +156,7 @@ export interface TaskItem {
   created_by?: string | null
   created_at?: string
   updated_at?: string
+  gcal_event_id?: string | null
 }
 
 export interface ChatMessageItem {
@@ -250,4 +252,5 @@ export interface AppointmentItem {
   created_by?: string | null
   created_at?: string
   updated_at?: string
+  gcal_event_id?: string | null
 }

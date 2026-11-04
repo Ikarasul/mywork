@@ -20,6 +20,9 @@ export interface GoogleCalendarSyncBarProps {
   weekRangeLabel: string
   overlayVisible: boolean
   onToggleOverlay: (visible: boolean) => void
+  autoSyncEnabled?: boolean
+  onToggleAutoSync?: (enabled: boolean) => void
+  onRequestWriteScope?: () => void
   syncing: boolean
   syncError: string | null
   syncSuccessMessage: string | null
@@ -35,6 +38,9 @@ export function GoogleCalendarSyncBar({
   weekRangeLabel,
   overlayVisible,
   onToggleOverlay,
+  autoSyncEnabled = true,
+  onToggleAutoSync,
+  onRequestWriteScope,
   syncing,
   syncError,
   syncSuccessMessage,
@@ -43,6 +49,13 @@ export function GoogleCalendarSyncBar({
   onSyncNow,
   onClearEvents,
 }: GoogleCalendarSyncBarProps) {
+  const isPermissionError =
+    syncError &&
+    (syncError.includes('Scope') ||
+      syncError.includes('insufficient') ||
+      syncError.includes('403') ||
+      syncError.includes('สิทธิ์'))
+
   return (
     <div className="rounded-2xl border border-line bg-surface-alt p-3.5 sm:p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -50,21 +63,38 @@ export function GoogleCalendarSyncBar({
           <div className="flex flex-wrap items-center gap-2">
             <span className="flex items-center gap-1.5 text-xs font-extrabold text-ink sm:text-sm">
               <IconCalendarDays className="h-4 w-4 text-accent-sky-fg" />
-              <span>ซิงก์ปฏิทิน Google Calendar (อ่านอย่างเดียว)</span>
+              <span>ซิงก์ปฏิทิน Google Calendar (2 ทาง)</span>
             </span>
             <Badge tone={lastSyncedAt ? 'sky' : 'neutral'}>
               {lastSyncedAt ? `${eventsCount} อีเวนต์สัปดาห์นี้` : 'ยังไม่ได้ซิงก์'}
             </Badge>
             <Badge tone="neutral">สัปดาห์: {weekRangeLabel}</Badge>
+            {autoSyncEnabled && (
+              <Badge tone="success" className="inline-flex items-center gap-1">
+                <span>🔄 อัปเดตกลับอัตโนมัติ</span>
+              </Badge>
+            )}
           </div>
           <p className="text-xs text-ink-muted">
             {lastSyncedAt
-              ? `ซิงก์ล่าสุดเมื่อ ${formatDateTimeThai(lastSyncedAt)} • แสดงซ้อนทับตารางโดยไม่เขียนข้อมูลกลับไปที่ Google`
-              : 'กดปุ่มซิงก์เพื่อดึงอีเวนต์สัปดาห์นี้จาก Google Calendar มาแสดงซ้อนทับบนตาราง (ไม่อัปเดตเองเบื้องหลัง)'}
+              ? `ซิงก์ล่าสุดเมื่อ ${formatDateTimeThai(lastSyncedAt)} • รองรับการซิงค์ 2 ทาง (ย้ายคาบ / นัดหมาย / สอบ จะอัปเดตไปยัง Google Calendar)`
+              : 'กดปุ่มซิงก์เพื่อเชื่อมต่อ Google Calendar ของคุณ (ดึงกิจกรรมมาแสดง และอัปเดตการแก้ไขกลับอัตโนมัติ)'}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {onToggleAutoSync && (
+            <label className="inline-flex min-h-[38px] cursor-pointer items-center gap-2 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink hover:bg-surface-alt">
+              <input
+                type="checkbox"
+                checked={autoSyncEnabled}
+                onChange={(e) => onToggleAutoSync(e.target.checked)}
+                className="rounded border-line-strong text-primary"
+              />
+              <span>ซิงค์กลับ Google อัตโนมัติ</span>
+            </label>
+          )}
+
           {lastSyncedAt && (
             <label className="inline-flex min-h-[38px] cursor-pointer items-center gap-2 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink">
               <input
@@ -75,6 +105,18 @@ export function GoogleCalendarSyncBar({
               />
               แสดงซ้อนบนตาราง
             </label>
+          )}
+
+          {onRequestWriteScope && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={syncing || !isSupabaseConfigured}
+              onClick={onRequestWriteScope}
+              title="ขอสิทธิ์เขียนเพื่อให้อัปเดตและลบอีเวนต์บน Google Calendar ได้"
+            >
+              ขอสิทธิ์บันทึก Google
+            </Button>
           )}
 
           <Button
@@ -113,8 +155,20 @@ export function GoogleCalendarSyncBar({
       )}
 
       {syncError && (
-        <div className="mt-3">
+        <div className="mt-3 flex flex-col gap-2">
           <Toast tone="danger" message={syncError} onClose={onClearError} />
+          {isPermissionError && onRequestWriteScope && (
+            <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 p-2.5 text-xs text-amber-700 dark:text-amber-300">
+              <span>สิทธิ์การเขียน Google Calendar ยังไม่ได้รับการอนุมัติ</span>
+              <button
+                type="button"
+                onClick={onRequestWriteScope}
+                className="font-bold underline hover:no-underline"
+              >
+                กดที่นี่เพื่อขอสิทธิ์บันทึกปฏิทิน
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -150,63 +204,59 @@ export function GoogleCalendarEventModal({
                 <IconCalendarDays className="h-3 w-3 shrink-0" />
                 <span>Google Calendar</span>
               </Badge>
-              <Badge tone="neutral">อ่านอย่างเดียว</Badge>
+              {event.isAllDay && <Badge tone="neutral">ทั้งวัน</Badge>}
             </div>
-            <h3 className="mt-2 text-base font-bold text-ink">{event.summary}</h3>
+            <h2 className="mt-2 text-base font-bold text-ink">{event.summary}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted hover:bg-surface-alt hover:text-ink"
+            aria-label="ปิดหน้าต่าง"
+            className="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-xl text-sm font-bold text-ink-muted hover:bg-surface-alt hover:text-ink"
           >
             <IconX className="h-4 w-4" />
           </button>
         </div>
 
         <div className="space-y-2 text-xs text-ink-secondary">
-          <div className="flex items-center justify-between rounded-xl bg-surface-alt px-3 py-2">
-            <span className="font-semibold text-ink-muted">วันและเวลา</span>
-            <span className="font-mono font-bold text-ink">
-              วัน{DAY_NAMES[event.day]}{' '}
-              {event.isAllDay ? '(ตลอดทั้งวัน)' : `${event.startTime} – ${event.endTime}`}
+          <div>
+            <span className="font-semibold text-ink">วัน: </span>
+            <span>วัน{DAY_NAMES[event.day]}</span>
+          </div>
+          <div>
+            <span className="font-semibold text-ink">เวลา: </span>
+            <span>
+              {event.isAllDay ? 'ทั้งวัน' : `${event.startTime} – ${event.endTime} น.`}
             </span>
           </div>
-
           {event.location && (
-            <div className="rounded-xl bg-surface-alt px-3 py-2">
-              <span className="font-semibold text-ink-muted">สถานที่: </span>
-              <span className="font-medium text-ink">{event.location}</span>
+            <div>
+              <span className="font-semibold text-ink">สถานที่: </span>
+              <span>{event.location}</span>
             </div>
           )}
-
           {event.description && (
-            <div className="rounded-xl bg-surface-alt px-3 py-2">
-              <p className="font-semibold text-ink-muted">รายละเอียด:</p>
-              <p className="mt-1 whitespace-pre-wrap text-ink">{event.description}</p>
+            <div className="whitespace-pre-wrap rounded-xl border border-line bg-surface-alt p-3 text-xs text-ink">
+              {event.description}
             </div>
           )}
-
-          <p className="text-[11px] text-ink-muted">
-            * ระบบซิงก์ปฏิทิน Google แบบอ่านอย่างเดียว เว็บจะไม่แก้ไขหรือเขียนข้อมูลกลับไปยังบัญชี Google ของคุณ
-          </p>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line pt-3">
+        <div className="flex items-center justify-between gap-2 border-t border-line pt-3">
           <a
             href={event.htmlLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex min-h-[38px] items-center justify-center rounded-xl bg-primary px-4 py-2 text-xs font-bold text-ink-inverted transition hover:bg-primary-hover"
+            className="text-xs font-semibold text-primary underline hover:text-primary-hover"
           >
-            แก้ไขใน Google Calendar ↗
+            เปิดดูใน Google Calendar ↗
           </a>
           <Button variant="outline" size="sm" onClick={onClose}>
-            ปิดหน้าต่าง
+            ปิด
           </Button>
         </div>
       </div>
     </div>
   )
 }
-
 export default GoogleCalendarSyncBar

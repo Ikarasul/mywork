@@ -23,6 +23,13 @@ import {
 import { formatSupabaseErrorThai, useAuth } from '../lib/auth'
 import { formatDateTimeThai, getRelativeCountdownThai } from '../lib/dateThai'
 import {
+  createGoogleCalendarEvent,
+  deleteGoogleCalendarEvent,
+  getGoogleProviderToken,
+  isGcalAutoSyncEnabled,
+  refreshGoogleCalendarCache,
+} from '../lib/googleCalendar'
+import {
   DEFAULT_SAMPLE_SCHEDULE,
   DEFAULT_SEMESTER,
   formatStorageErrorThai,
@@ -238,6 +245,38 @@ export function TasksPage() {
     setErrorMessage(null)
 
     try {
+      let gcalEventId: string | null = null
+      const googleToken = getGoogleProviderToken()
+      if (taskType === 'exam' && dueDate && isGcalAutoSyncEnabled() && googleToken) {
+        try {
+          const hasTime = dueDate.includes('T') || dueDate.includes(':')
+          const dateOnly = dueDate.split('T')[0]
+          const startIso = hasTime ? new Date(dueDate).toISOString() : undefined
+          const endIso = hasTime
+            ? new Date(new Date(dueDate).getTime() + 2 * 60 * 60 * 1000).toISOString()
+            : undefined
+
+          const gcalRes = await createGoogleCalendarEvent(googleToken, {
+            summary: `[สอบ] ${courseCode ? courseCode.trim().toUpperCase() + ' ' : ''}${title.trim()}`,
+            description: [
+              description.trim(),
+              examTopics.trim() ? `หัวข้อสอบ: ${examTopics.trim()}` : '',
+            ]
+              .filter(Boolean)
+              .join('\n'),
+            location: examRoom.trim(),
+            isAllDay: !hasTime,
+            date: dateOnly,
+            startIso,
+            endIso,
+          })
+          gcalEventId = gcalRes.id
+          void refreshGoogleCalendarCache(googleToken)
+        } catch (gcalErr) {
+          console.warn('Google Calendar sync for exam failed:', gcalErr)
+        }
+      }
+
       if (!user || !supabase) {
         const newLocalTask: TaskItem = {
           id: window.crypto.randomUUID(),
@@ -251,6 +290,7 @@ export function TasksPage() {
           exam_room: taskType === 'exam' ? examRoom.trim() : '',
           exam_topics: taskType === 'exam' ? examTopics.trim() : '',
           created_at: new Date().toISOString(),
+          gcal_event_id: gcalEventId,
         }
         const updated = [newLocalTask, ...tasks]
         await localStore.set('tasks', updated)
@@ -274,18 +314,27 @@ export function TasksPage() {
           created_by: user.id,
         }
 
-        const { error } = await supabase.from('tasks').insert({
+        const fullInsert = {
           ...baseInsert,
           exam_room: taskType === 'exam' ? examRoom.trim() : '',
           exam_topics: taskType === 'exam' ? examTopics.trim() : '',
-        })
+          gcal_event_id: gcalEventId,
+        }
+
+        let { error } = await supabase.from('tasks').insert(fullInsert)
 
         if (error) {
-          if (error.message?.includes('exam_room') || error.message?.includes('column')) {
-            const { error: fallbackError } = await supabase
-              .from('tasks')
-              .insert(baseInsert)
-            if (fallbackError) throw fallbackError
+          // หากไม่มีคอลัมน์ gcal_event_id หรือ exam_room ให้ลอง insert แบบ fallback
+          if (error.message?.includes('gcal_event_id') || error.message?.includes('exam_room') || error.message?.includes('column')) {
+            const fallbackRes = await supabase.from('tasks').insert({
+              ...baseInsert,
+              exam_room: taskType === 'exam' ? examRoom.trim() : '',
+              exam_topics: taskType === 'exam' ? examTopics.trim() : '',
+            })
+            if (fallbackRes.error) {
+              const minimalRes = await supabase.from('tasks').insert(baseInsert)
+              if (minimalRes.error) throw minimalRes.error
+            }
           } else {
             throw error
           }
@@ -362,6 +411,16 @@ export function TasksPage() {
     if (!isOwnerOrAdmin) return
     setErrorMessage(null)
     try {
+      const taskToDelete = tasks.find((t) => t.id === taskId)
+      if (taskToDelete?.gcal_event_id && isGcalAutoSyncEnabled()) {
+        const googleToken = getGoogleProviderToken()
+        if (googleToken) {
+          deleteGoogleCalendarEvent(googleToken, taskToDelete.gcal_event_id)
+            .then(() => refreshGoogleCalendarCache(googleToken))
+            .catch((err) => console.warn('Failed to delete Google exam event:', err))
+        }
+      }
+
       if (!user || !supabase) {
         const updated = tasks.filter((t) => t.id !== taskId)
         await localStore.set('tasks', updated)

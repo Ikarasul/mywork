@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { formatSupabaseErrorThai, useAuth } from './auth'
+import {
+  createGoogleCalendarEvent,
+  deleteGoogleCalendarEvent,
+  getGoogleProviderToken,
+  isGcalAutoSyncEnabled,
+  refreshGoogleCalendarCache,
+  updateGoogleCalendarEvent,
+} from './googleCalendar'
 import { localStore } from './storage'
 import { supabase } from './supabase'
 import type { AppointmentItem, DayOfWeek } from '../types'
@@ -47,6 +55,7 @@ export interface AppointmentInput {
   location: string
   notes: string
   course_code: string
+  gcal_event_id?: string | null
 }
 
 /** ตรวจความถูกต้องของข้อมูลนัดก่อนบันทึก (คืนข้อความเตือนภาษาไทย หรือ null ถ้าผ่าน) */
@@ -208,6 +217,49 @@ export function useAppointments() {
       if (invalid) throw new Error(invalid)
       if (!canManage) throw new Error('โหมดดูอย่างเดียว: คุณไม่มีสิทธิ์เพิ่มหรือแก้ไขนัด')
 
+      const existing = id ? appointments.find((a) => a.id === id) : undefined
+      let gcalEventId = existing?.gcal_event_id ?? input.gcal_event_id ?? null
+
+      // หากเปิดใช้ Auto-Sync Google Calendar และมี Google Token ให้ซิงค์ 2 ทาง
+      const googleToken = getGoogleProviderToken()
+      if (isGcalAutoSyncEnabled() && googleToken) {
+        try {
+          const gcalPayload = {
+            summary: input.title.trim(),
+            description: [
+              input.course_code ? `วิชา: ${input.course_code.trim().toUpperCase()}` : '',
+              input.notes ? input.notes.trim() : '',
+            ]
+              .filter(Boolean)
+              .join('\n'),
+            location: input.location.trim(),
+            isAllDay: input.all_day,
+            date: input.appt_date,
+            startIso: input.all_day
+              ? undefined
+              : `${input.appt_date}T${input.start_time}:00+07:00`,
+            endIso: input.all_day
+              ? undefined
+              : `${input.appt_date}T${input.end_time}:00+07:00`,
+          }
+
+          if (gcalEventId) {
+            try {
+              await updateGoogleCalendarEvent(googleToken, gcalEventId, gcalPayload)
+            } catch {
+              const res = await createGoogleCalendarEvent(googleToken, gcalPayload)
+              gcalEventId = res.id
+            }
+          } else {
+            const res = await createGoogleCalendarEvent(googleToken, gcalPayload)
+            gcalEventId = res.id
+          }
+          void refreshGoogleCalendarCache(googleToken)
+        } catch (gcalErr) {
+          console.warn('Google Calendar sync failed:', gcalErr)
+        }
+      }
+
       const row = {
         title: input.title.trim(),
         appt_date: input.appt_date,
@@ -217,16 +269,39 @@ export function useAppointments() {
         location: input.location.trim(),
         notes: input.notes.trim(),
         course_code: input.course_code.trim().toUpperCase(),
+        gcal_event_id: gcalEventId,
+      }
+
+      // ฟังก์ชันช่วยเหลือสำหรับลองบันทึกโดยตัด gcal_event_id ออกหากตารางยังไม่มีคอลัมน์นี้
+      const rowWithoutGcal = {
+        title: row.title,
+        appt_date: row.appt_date,
+        start_time: row.start_time,
+        end_time: row.end_time,
+        all_day: row.all_day,
+      location: row.location,
+        notes: row.notes,
+        course_code: row.course_code,
       }
 
       try {
         if (useRemote && supabase && activeGroup && user) {
           if (id) {
-            const { data, error: err } = await supabase
+            let updateRes = await supabase
               .from('appointments')
               .update(row)
               .eq('id', id)
               .select('id')
+
+            if (updateRes.error && (updateRes.error.message?.includes('gcal_event_id') || updateRes.error.message?.includes('column'))) {
+              updateRes = await supabase
+                .from('appointments')
+                .update(rowWithoutGcal)
+                .eq('id', id)
+                .select('id')
+            }
+
+            const { data, error: err } = updateRes
             if (err) {
               if (isMissingTableError(err)) {
                 await saveLocalFallback(
@@ -239,7 +314,6 @@ export function useAppointments() {
               throw err
             }
             if (!data || data.length === 0) {
-              // หากเป็นรายการที่อยู่ใน local fallback ให้แก้ไขใน localStore ได้
               const localList = (await localStore.get<AppointmentItem[]>(localKey)) ?? []
               if (localList.some((a) => a.id === id)) {
                 await saveLocalFallback(
@@ -252,9 +326,17 @@ export function useAppointments() {
               throw new Error('คุณไม่มีสิทธิ์แก้ไขนัดนี้ (ถูกปฏิเสธโดย RLS)')
             }
           } else {
-            const { error: err } = await supabase
+            let insertRes = await supabase
               .from('appointments')
               .insert({ ...row, group_id: activeGroup.id, created_by: user.id })
+
+            if (insertRes.error && (insertRes.error.message?.includes('gcal_event_id') || insertRes.error.message?.includes('column'))) {
+              insertRes = await supabase
+                .from('appointments')
+                .insert({ ...rowWithoutGcal, group_id: activeGroup.id, created_by: user.id })
+            }
+
+            const { error: err } = insertRes
             if (err) {
               if (isMissingTableError(err)) {
                 await saveLocalFallback({
@@ -294,7 +376,7 @@ export function useAppointments() {
       }
       await reload()
     },
-    [canManage, useRemote, activeGroup, user, localKey, saveLocalFallback, reload],
+    [appointments, canManage, useRemote, activeGroup, user, localKey, saveLocalFallback, reload],
   )
 
   const deleteAppointment = useCallback(
@@ -307,6 +389,16 @@ export function useAppointments() {
           (currentRole === 'member' && (!target.created_by || target.created_by === user.id))
         if (!allowed) {
           throw new Error('คุณไม่มีสิทธิ์ลบนัดนี้ (สมาชิกลบได้เฉพาะนัดที่ตนเองสร้าง)')
+        }
+      }
+
+      // หากมีอีเวนต์บน Google Calendar และเปิดใช้ Auto-Sync ให้ลบออกจาก Google ด้วย
+      if (target?.gcal_event_id && isGcalAutoSyncEnabled()) {
+        const googleToken = getGoogleProviderToken()
+        if (googleToken) {
+          deleteGoogleCalendarEvent(googleToken, target.gcal_event_id)
+            .then(() => refreshGoogleCalendarCache(googleToken))
+            .catch((err) => console.warn('Failed to delete Google Calendar event:', err))
         }
       }
 

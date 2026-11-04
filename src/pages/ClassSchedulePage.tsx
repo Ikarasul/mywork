@@ -1844,6 +1844,9 @@ export function ClassSchedulePage() {
             weekRangeLabel={gcal.weekRangeLabel}
             overlayVisible={gcal.overlayVisible}
             onToggleOverlay={gcal.setOverlayVisible}
+            autoSyncEnabled={gcal.autoSyncEnabled}
+            onToggleAutoSync={gcal.setAutoSyncEnabled}
+            onRequestWriteScope={() => void gcal.requestWriteScope()}
             syncing={gcal.syncing}
             syncError={gcal.syncError}
             syncSuccessMessage={gcal.syncSuccessMessage}

@@ -2,18 +2,20 @@ import { useCallback, useEffect, useState } from 'react'
 import { GOOGLE_PROVIDER_TOKEN_STORAGE_KEY, useAuth } from './auth'
 import type { DayOfWeek, GoogleCalendarEventItem } from '../types'
 
-const GCAL_CACHE_STORAGE_KEY = 'lsp:gcal_events_cache'
-const GCAL_OVERLAY_STORAGE_KEY = 'lsp:gcal_overlay_visible'
-const GCAL_PENDING_SYNC_KEY = 'lsp:gcal_pending_sync'
-const GCAL_UPDATE_EVENT = 'lsp:gcal-updated'
+export const GCAL_CACHE_STORAGE_KEY = 'lsp:gcal_events_cache'
+export const GCAL_OVERLAY_STORAGE_KEY = 'lsp:gcal_overlay_visible'
+export const GCAL_AUTO_SYNC_STORAGE_KEY = 'lsp:gcal_auto_sync_enabled'
+export const GCAL_PENDING_SYNC_KEY = 'lsp:gcal_pending_sync'
+export const GCAL_UPDATE_EVENT = 'lsp:gcal-updated'
+export const GCAL_AUTO_SYNC_EVENT = 'lsp:gcal-auto-sync-updated'
 
-interface GoogleCalendarCachePayload {
+export interface GoogleCalendarCachePayload {
   events: GoogleCalendarEventItem[]
   lastSyncedAt: string | null
   weekRangeLabel: string
 }
 
-interface RawGoogleCalendarEvent {
+export interface RawGoogleCalendarEvent {
   id?: string
   status?: string
   summary?: string
@@ -30,6 +32,16 @@ interface RawGoogleCalendarEvent {
   }
 }
 
+export interface GoogleCalendarEventInput {
+  summary: string
+  description?: string
+  location?: string
+  date?: string // 'YYYY-MM-DD' for all-day event
+  startIso?: string // ISO timestamp or 'YYYY-MM-DDTHH:MM:00+07:00'
+  endIso?: string
+  isAllDay?: boolean
+}
+
 function toDayOfWeek(date: Date): DayOfWeek {
   const map: DayOfWeek[] = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
   return map[date.getDay()] ?? 'MON'
@@ -41,6 +53,14 @@ function pad2(n: number): string {
 
 function formatHHMM(date: Date): string {
   return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+}
+
+export function getNextDayDateKey(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  if (!y || !m || !d) return dateStr
+  const date = new Date(y, m - 1, d)
+  date.setDate(date.getDate() + 1)
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
 }
 
 export function getCurrentWeekBounds(reference: Date = new Date()): {
@@ -70,6 +90,32 @@ export function getCurrentWeekBounds(reference: Date = new Date()): {
     monday,
     sunday,
     weekRangeLabel: `${fmt.format(monday)} – ${fmt.format(sunday)}`,
+  }
+}
+
+export function isGcalAutoSyncEnabled(): boolean {
+  try {
+    const raw = window.localStorage.getItem(GCAL_AUTO_SYNC_STORAGE_KEY)
+    return raw === null ? true : raw === 'true'
+  } catch {
+    return true
+  }
+}
+
+export function setGcalAutoSyncEnabled(enabled: boolean): void {
+  try {
+    window.localStorage.setItem(GCAL_AUTO_SYNC_STORAGE_KEY, String(enabled))
+    window.dispatchEvent(new CustomEvent(GCAL_AUTO_SYNC_EVENT))
+  } catch {
+    // ignore
+  }
+}
+
+export function getGoogleProviderToken(): string | null {
+  try {
+    return window.sessionStorage.getItem(GOOGLE_PROVIDER_TOKEN_STORAGE_KEY)
+  } catch {
+    return null
   }
 }
 
@@ -227,10 +273,161 @@ export async function fetchGoogleCalendarWeekEvents(
   return { events, weekRangeLabel }
 }
 
+/**
+ * สร้างกิจกรรมใหม่บน Google Calendar ของผู้ใช้
+ */
+export async function createGoogleCalendarEvent(
+  accessToken: string,
+  event: GoogleCalendarEventInput,
+): Promise<{ id: string; htmlLink?: string }> {
+  const body: Record<string, unknown> = {
+    summary: event.summary,
+    description: event.description || '',
+    location: event.location || '',
+  }
+
+  if (event.isAllDay && event.date) {
+    body.start = { date: event.date }
+    body.end = { date: getNextDayDateKey(event.date) }
+  } else if (event.startIso && event.endIso) {
+    body.start = { dateTime: event.startIso, timeZone: 'Asia/Bangkok' }
+    body.end = { dateTime: event.endIso, timeZone: 'Asia/Bangkok' }
+  } else if (event.date) {
+    body.start = { date: event.date }
+    body.end = { date: getNextDayDateKey(event.date) }
+  }
+
+  const response = await fetch(
+    'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    },
+  )
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => null)
+    const rawMessage =
+      errorBody?.error?.message || `ไม่สามารถสร้างกิจกรรมบน Google Calendar ได้ (HTTP ${response.status})`
+    const err = new Error(rawMessage) as Error & { status?: number }
+    err.status = response.status
+    throw err
+  }
+
+  const data = (await response.json()) as { id: string; htmlLink?: string }
+  return { id: data.id, htmlLink: data.htmlLink }
+}
+
+/**
+ * อัปเดตกิจกรรมเดิมบน Google Calendar
+ */
+export async function updateGoogleCalendarEvent(
+  accessToken: string,
+  eventId: string,
+  event: GoogleCalendarEventInput,
+): Promise<{ id: string; htmlLink?: string }> {
+  const body: Record<string, unknown> = {
+    summary: event.summary,
+    description: event.description || '',
+    location: event.location || '',
+  }
+
+  if (event.isAllDay && event.date) {
+    body.start = { date: event.date }
+    body.end = { date: getNextDayDateKey(event.date) }
+  } else if (event.startIso && event.endIso) {
+    body.start = { dateTime: event.startIso, timeZone: 'Asia/Bangkok' }
+    body.end = { dateTime: event.endIso, timeZone: 'Asia/Bangkok' }
+  } else if (event.date) {
+    body.start = { date: event.date }
+    body.end = { date: getNextDayDateKey(event.date) }
+  }
+
+  const response = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    },
+  )
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => null)
+    const rawMessage =
+      errorBody?.error?.message || `ไม่สามารถอัปเดตกิจกรรมบน Google Calendar ได้ (HTTP ${response.status})`
+    const err = new Error(rawMessage) as Error & { status?: number }
+    err.status = response.status
+    throw err
+  }
+
+  const data = (await response.json()) as { id: string; htmlLink?: string }
+  return { id: data.id, htmlLink: data.htmlLink }
+}
+
+/**
+ * ลบกิจกรรมออกจาก Google Calendar
+ */
+export async function deleteGoogleCalendarEvent(
+  accessToken: string,
+  eventId: string,
+): Promise<boolean> {
+  const response = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
+    {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  )
+
+  if (response.status === 204 || response.status === 404 || response.status === 410) {
+    return true
+  }
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => null)
+    const rawMessage =
+      errorBody?.error?.message || `ไม่สามารถลบกิจกรรมบน Google Calendar ได้ (HTTP ${response.status})`
+    const err = new Error(rawMessage) as Error & { status?: number }
+    err.status = response.status
+    throw err
+  }
+
+  return true
+}
+
+/**
+ * ดึงข้อมูลสัปดาห์นี้และอัปเดตแคชเบื้องหลังทันที
+ */
+export async function refreshGoogleCalendarCache(accessToken?: string): Promise<void> {
+  const token = accessToken || getGoogleProviderToken()
+  if (!token) return
+  try {
+    const { events, weekRangeLabel } = await fetchGoogleCalendarWeekEvents(token)
+    writeCachedCalendar({
+      events,
+      lastSyncedAt: new Date().toISOString(),
+      weekRangeLabel,
+    })
+  } catch {
+    // ละเว้นข้อผิดพลาดเบื้องหลัง
+  }
+}
+
 export function useGoogleCalendar() {
   const { googleProviderToken, signInWithGoogle } = useAuth()
   const [cache, setCache] = useState<GoogleCalendarCachePayload>(() => readCachedCalendar())
   const [overlayVisible, setOverlayVisibleState] = useState<boolean>(() => readOverlayVisible())
+  const [autoSyncEnabled, setAutoSyncEnabledState] = useState<boolean>(() => isGcalAutoSyncEnabled())
   const [syncing, setSyncing] = useState<boolean>(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [syncSuccessMessage, setSyncSuccessMessage] = useState<string | null>(null)
@@ -239,11 +436,14 @@ export function useGoogleCalendar() {
     function handleUpdate() {
       setCache(readCachedCalendar())
       setOverlayVisibleState(readOverlayVisible())
+      setAutoSyncEnabledState(isGcalAutoSyncEnabled())
     }
     window.addEventListener(GCAL_UPDATE_EVENT, handleUpdate)
+    window.addEventListener(GCAL_AUTO_SYNC_EVENT, handleUpdate)
     window.addEventListener('storage', handleUpdate)
     return () => {
       window.removeEventListener(GCAL_UPDATE_EVENT, handleUpdate)
+      window.removeEventListener(GCAL_AUTO_SYNC_EVENT, handleUpdate)
       window.removeEventListener('storage', handleUpdate)
     }
   }, [])
@@ -256,6 +456,11 @@ export function useGoogleCalendar() {
     } catch {
       // ignore storage errors
     }
+  }, [])
+
+  const setAutoSync = useCallback((enabled: boolean) => {
+    setGcalAutoSyncEnabled(enabled)
+    setAutoSyncEnabledState(enabled)
   }, [])
 
   const performSyncWithToken = useCallback(async (token: string) => {
@@ -315,11 +520,29 @@ export function useGoogleCalendar() {
     }
   }, [googleProviderToken, performSyncWithToken])
 
+  const requestWriteScope = useCallback(
+    async (redirectPath?: string) => {
+      try {
+        window.sessionStorage.setItem(GCAL_PENDING_SYNC_KEY, 'true')
+      } catch {
+        // ignore
+      }
+      const targetPath = redirectPath || window.location.pathname || '/calendar'
+      const { error } = await signInWithGoogle({
+        withCalendarScope: true,
+        redirectPath: targetPath,
+      })
+      if (error) {
+        setSyncError(error)
+      }
+    },
+    [signInWithGoogle],
+  )
+
   const syncNow = useCallback(async () => {
     setSyncError(null)
     setSyncSuccessMessage(null)
 
-    // หากมี token อยู่แล้ว ให้ลองดึงข้อมูลทันที
     if (googleProviderToken) {
       const result = await performSyncWithToken(googleProviderToken)
       if (result.ok || !result.needsReauth) {
@@ -327,28 +550,8 @@ export function useGoogleCalendar() {
       }
     }
 
-    // หากยังไม่มี token หรือ token หมดอายุ/ยังไม่ได้ขอ scope calendar.readonly ให้ส่งไปขอสิทธิ์ OAuth
-    try {
-      window.sessionStorage.setItem(GCAL_PENDING_SYNC_KEY, 'true')
-    } catch {
-      // ignore
-    }
-
-    const currentPath = window.location.pathname || '/schedule'
-    const { error } = await signInWithGoogle({
-      withCalendarScope: true,
-      redirectPath: currentPath,
-    })
-
-    if (error) {
-      try {
-        window.sessionStorage.removeItem(GCAL_PENDING_SYNC_KEY)
-      } catch {
-        // ignore
-      }
-      setSyncError(error)
-    }
-  }, [googleProviderToken, performSyncWithToken, signInWithGoogle])
+    await requestWriteScope()
+  }, [googleProviderToken, performSyncWithToken, requestWriteScope])
 
   const clearSyncedEvents = useCallback(() => {
     const emptyPayload: GoogleCalendarCachePayload = {
@@ -368,12 +571,15 @@ export function useGoogleCalendar() {
     weekRangeLabel: cache.weekRangeLabel,
     overlayVisible,
     setOverlayVisible,
+    autoSyncEnabled,
+    setAutoSyncEnabled: setAutoSync,
     syncing,
     syncError,
     syncSuccessMessage,
     setSyncError,
     setSyncSuccessMessage,
     syncNow,
+    requestWriteScope,
     clearSyncedEvents,
     hasToken: Boolean(googleProviderToken),
   }

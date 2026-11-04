@@ -12,7 +12,8 @@ import type { EffectiveRole, GroupInfo, GroupMemberWithProfile, GroupRole } from
 
 const ACTIVE_GROUP_STORAGE_KEY = 'lsp:active_group_id'
 export const GOOGLE_PROVIDER_TOKEN_STORAGE_KEY = 'lsp:google_provider_token'
-export const GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
+export const GOOGLE_CALENDAR_SCOPE =
+  'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events'
 
 export function getRoleLabelThai(role: EffectiveRole): string {
   switch (role) {

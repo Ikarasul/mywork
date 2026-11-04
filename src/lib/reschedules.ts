@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { dateKeyToDay } from './appointments'
 import { useAuth } from './auth'
+import {
+  createGoogleCalendarEvent,
+  deleteGoogleCalendarEvent,
+  getGoogleProviderToken,
+  isGcalAutoSyncEnabled,
+  refreshGoogleCalendarCache,
+  updateGoogleCalendarEvent,
+} from './googleCalendar'
 import { DEFAULT_SEMESTER, localStore, timeToMinutes } from './storage'
 import type {
   ClassRescheduleOverride,
@@ -122,6 +130,47 @@ export function useClassReschedules(semester: string = DEFAULT_SEMESTER) {
             o.original_start === input.original_start),
       )
 
+      let gcalEventId =
+        existingIndex >= 0 ? list[existingIndex].gcal_event_id : undefined
+
+      // ซิงค์การเปลี่ยนแปลงไปยัง Google Calendar เมื่อเปิด Auto-Sync
+      const googleToken = getGoogleProviderToken()
+      if (isGcalAutoSyncEnabled() && googleToken) {
+        try {
+          const isCancel = Boolean(input.canceled)
+          const gcalPayload = {
+            summary: isCancel
+              ? `[งดเรียน] ${input.course_code.trim().toUpperCase()} ${input.course_name.trim()}`
+              : `[ย้ายคาบ] ${input.course_code.trim().toUpperCase()} ${input.course_name.trim()}`,
+            location: isCancel ? '' : (input.new_room?.trim() || ''),
+            description: isCancel
+              ? `งดการเรียนการสอนในคาบเดิม: วัน${DAY_THAI_NAMES[input.original_day]} (${input.original_date} เวลา ${input.original_start}–${input.original_end})${input.reason?.trim() ? `\nเหตุผล: ${input.reason.trim()}` : ''}`
+              : `ย้ายมาจากวัน${DAY_THAI_NAMES[input.original_day]} (${input.original_date} เวลา ${input.original_start}–${input.original_end})${input.reason?.trim() ? `\nเหตุผล: ${input.reason.trim()}` : ''}`,
+            startIso: isCancel
+              ? `${input.original_date}T${input.original_start}:00+07:00`
+              : `${input.new_date}T${input.new_start}:00+07:00`,
+            endIso: isCancel
+              ? `${input.original_date}T${input.original_end}:00+07:00`
+              : `${input.new_date}T${input.new_end}:00+07:00`,
+          }
+
+          if (gcalEventId) {
+            try {
+              await updateGoogleCalendarEvent(googleToken, gcalEventId, gcalPayload)
+            } catch {
+              const res = await createGoogleCalendarEvent(googleToken, gcalPayload)
+              gcalEventId = res.id
+            }
+          } else {
+            const res = await createGoogleCalendarEvent(googleToken, gcalPayload)
+            gcalEventId = res.id
+          }
+          void refreshGoogleCalendarCache(googleToken)
+        } catch (gcalErr) {
+          console.warn('Google Calendar sync for reschedule failed:', gcalErr)
+        }
+      }
+
       const record: ClassRescheduleOverride = {
         id: existingIndex >= 0 ? list[existingIndex].id : window.crypto.randomUUID(),
         group_id: activeGroup?.id,
@@ -145,6 +194,7 @@ export function useClassReschedules(semester: string = DEFAULT_SEMESTER) {
           existingIndex >= 0
             ? list[existingIndex].created_at
             : new Date().toISOString(),
+        gcal_event_id: gcalEventId,
       }
 
       // ถ้าผู้ใช้ลากกลับไปวันเดิมและเวลาเดิมและไม่ได้งดคลาส ให้ลบ override ออก (เท่ากับคืนค่าเดิม)
@@ -155,6 +205,11 @@ export function useClassReschedules(semester: string = DEFAULT_SEMESTER) {
         record.new_end === record.original_end &&
         !record.new_room
       ) {
+        if (gcalEventId && isGcalAutoSyncEnabled() && googleToken) {
+          deleteGoogleCalendarEvent(googleToken, gcalEventId)
+            .then(() => refreshGoogleCalendarCache(googleToken))
+            .catch((err) => console.warn('Failed to delete Google event on revert:', err))
+        }
         const filtered =
           existingIndex >= 0 ? list.filter((_, i) => i !== existingIndex) : list
         await localStore.set(storageKey, filtered)
@@ -181,6 +236,17 @@ export function useClassReschedules(semester: string = DEFAULT_SEMESTER) {
         throw new Error('โหมดดูอย่างเดียว: คุณไม่มีสิทธิ์คืนค่าคาบเรียน')
       }
       const list = (await localStore.get<ClassRescheduleOverride[]>(storageKey)) ?? []
+      const target = list.find((o) => o.id === overrideId)
+
+      if (target?.gcal_event_id && isGcalAutoSyncEnabled()) {
+        const googleToken = getGoogleProviderToken()
+        if (googleToken) {
+          deleteGoogleCalendarEvent(googleToken, target.gcal_event_id)
+            .then(() => refreshGoogleCalendarCache(googleToken))
+            .catch((err) => console.warn('Failed to delete Google event on restore:', err))
+        }
+      }
+
       const next = list.filter((o) => o.id !== overrideId)
       await localStore.set(storageKey, next)
       setOverrides(next)
